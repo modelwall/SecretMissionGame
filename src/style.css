@@ -1,0 +1,264 @@
+:root {
+  font-family: 'Prompt', 'Nunito', sans-serif;
+  color: #302b3b;
+  background: #fff9f6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #302b3b;
+  --muted: #8b8392;
+  --lavender: #d9c6fa;
+  --pink: #f8b9c7;
+  --primary: #ed7699;
+  --green: #c0e8bc;
+  --yellow: #ffe4a6;
+}
+* { box-sizing: border-box; }
+html { min-width: 320px; }
+body { margin: 0; min-height: 100vh; background: linear-gradient(180deg,#fff8f5 0%,#fffafd 55%,#fff8f0 100%); }
+button,input { font: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button:disabled { cursor: not-allowed; opacity: .65; }
+button:focus-visible,input:focus-visible { outline: 3px solid #9e7ff4; outline-offset: 3px; }
+#app { position: relative; isolation: isolate; min-height: 100vh; overflow: hidden; padding-bottom: max(28px,env(safe-area-inset-bottom)); }
+.container { width: min(100% - 32px, 620px); margin: 0 auto; position: relative; z-index: 1; }
+.blob-decoration { position: absolute; z-index: 0; pointer-events: none; border-radius: 50%; opacity: .74; filter: blur(1px); }
+.blob-decoration.b1 { width: 340px; height: 340px; background: #ffdae4; top: -220px; right: -200px; }
+.blob-decoration.b2 { width: 310px; height: 310px; background: #fff1cb; top: 480px; left: -260px; }
+.topbar { min-height: 82px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.logo-button { border: 0; display: flex; gap: 8px; align-items: center; background: none; padding: 0; color: var(--ink); }
+.logo-mark { width: 37px; height: 37px; display:grid;place-items:center; color: #fff; background: #ee80a0; border-radius: 12px; font-size: 28px; font-family: 'Nunito'; transform: rotate(-8deg); }
+.brand { font-family: 'Fredoka','Nunito',sans-serif; font-weight: 700; letter-spacing: -.8px; font-size: 16px; white-space: nowrap; }
+.brand span { color: #ed799a; }
+.topbar-badge { font: 700 9px 'Nunito',sans-serif; letter-spacing: 1.6px; border: 1.5px solid #f6c5cb; background: #fff; padding: 9px 12px; border-radius: 100px; color: #9f6676; }
+.text-button { border: none; background: transparent; display: inline-flex; align-items:center; gap: 6px; padding: 7px; color: #6a6272; font-weight: 600; font-size: 12px; }
+.text-button.muted { color: #8c8395; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: none; border-radius: 16px; padding: 13px 16px; font-size: 13px; font-weight: 600; min-height: 45px; transition: transform .16s, box-shadow .16s; white-space: nowrap; }
+.btn:active { transform: translateY(2px); }
+.btn.primary { color: #fff; background: #ec7fa0; box-shadow: 0 5px 0 #d86688; }
+.btn.primary:hover:not(:disabled) { background: #e86c93; }
+.btn.big { min-height: 55px; width: 100%; border-radius: 18px; font-size: 15px; }
+.btn.navy,.btn.dark { background: #484158; color: #fff; }
+.btn.outline { color: var(--ink); background: #fff; border: 2px solid #eee2df; }
+.btn.compact-btn { padding: 9px 11px; min-height: 39px; border-radius: 12px; font-size: 11px; }
+.loading-screen { min-height: 90vh; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 10px; color: var(--muted); }
+.loading-emoji { font-size: 70px; animation: bob 2s infinite alternate ease-in-out; }
+@keyframes bob { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-11px) rotate(4deg); } }
+/* Welcome */
+.welcome-main { padding-bottom: 30px; }
+.welcome-hero { text-align: center; position: relative; padding: 0 0 19px; }
+.hero-illustration { margin: 0 auto -6px; width: min(100%, 405px); }
+.hero-car-art { width: 100%; display: block; filter: drop-shadow(0 15px 0 rgba(246,198,192,.16)); }
+.float-sticker { position: absolute; font-size: 32px; }
+.sticker-star { color:#b9a0f2; top: 30px; left: 8%; transform: rotate(-15deg); }
+.sticker-peach { top: 12px; right: 5%; transform: rotate(15deg); }
+.mini-kicker { display: inline-block; font: 800 10px 'Nunito'; letter-spacing: 2.4px; color: #ad849b; margin-bottom: 7px; }
+h1,h2,h3,p { margin-top: 0; }
+h1,h2,h3 { letter-spacing: -.7px; }
+.welcome-hero h1 { font: 700 clamp(40px, 10vw, 63px)/1.03 'Fredoka','Nunito',sans-serif; letter-spacing: -2px; margin: 0 0 12px; }
+.welcome-hero h1 span { color: #ed80a1; }
+.welcome-hero p { line-height: 1.9; font-size: 13px; color: #706879; margin: 0; }
+.stats-strip { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 21px 0 0; }
+.stats-strip span { background: #fff; box-shadow: 0 2px 12px #a6879931; padding: 10px 11px; border-radius: 100px; font: 700 11px 'Nunito',sans-serif; }
+.stats-strip b { font-size: 13px; }
+.welcome-actions { position: relative; z-index: 1; padding: 22px 22px 24px; background: #fff; box-shadow: 0 12px 35px #d8b9c439; border-radius: 25px; border: 1px solid #fff; }
+.actions-heading { display: flex; align-items:center;gap: 11px; margin-bottom: 17px; }
+.actions-heading > span { display: grid; place-items: center; background: #fff0ec; border-radius: 15px; font-size: 29px; width: 52px;height:52px; flex: none; }
+.actions-heading h2 { margin: 0 0 5px; font-size: 17px; }
+.actions-heading p { margin: 0; color: var(--muted); font-size: 11px; }
+.or-line { display: flex;align-items: center;gap: 12px;color: #a19aa7;font-size: 11px;margin: 25px 0 13px; }
+.or-line::before,.or-line::after { content: ''; flex:1; height: 1px; background: #f0e7ed; }
+.code-form label,.join-name-form label { display:block;font: 800 10px 'Nunito',sans-serif;letter-spacing: 1.7px;color:#7e7684;margin-bottom:10px; }
+.code-input-row { display:flex;gap:8px; }
+input { width: 100%; min-width: 0; border:2px solid #f1e9ed; background: #fffbfd; outline:none; border-radius:14px; padding:13px; color:var(--ink); }
+input:focus { border-color:#ec89a7;outline: none; }
+.code-form input { letter-spacing:1.3px;font:700 14px 'Nunito',sans-serif;text-transform: uppercase; }
+.code-form .btn { padding: 10px 12px; }
+.footer-note { font-size: 11px; text-align:center; color:#a69ca9; padding:22px 0 0; }
+/* Select car */
+.select-main { padding-bottom: 35px; }
+.eyebrow { display:flex; align-items:center;gap:8px; font: 900 10px 'Nunito',sans-serif; color: #a48196; letter-spacing: 1.5px; }
+.step-dot { display:grid;place-items:center;color:#fff; background:#f18da9; height:24px; min-width:24px; padding:0 3px;border-radius:9px; font-size:12px;letter-spacing:0; }
+.section-heading { margin: 15px 0 17px; }
+.section-heading h1 { font:700 clamp(23px,6vw,32px)/1.3 'Prompt',sans-serif;margin:0 0 4px; }
+.section-heading p,.section-heading.compact p {font-size:12px;color:#9a90a2;line-height:1.7;margin:0;}
+.room-code-bar { background:#524963;color:#fff; border-radius:18px;display:flex;align-items:center;justify-content:space-between;padding:15px 18px;margin-bottom:20px; }
+.room-code-bar span { display:block; font:800 9px 'Nunito',sans-serif;letter-spacing:1.4px;color:#c7bfd3;margin-bottom:4px; }
+.room-code-bar strong { font:700 22px 'Fredoka',sans-serif;letter-spacing:4px; }
+.copy-code { color:#50425b;background:#fff2e5;display:flex;gap:5px;align-items:center;font-size:11px;font-weight:700;padding:9px 12px;border:0;border-radius:13px; }
+.car-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px; }
+.car-option { position:relative;display:flex;align-items:flex-start;flex-direction:column;text-align:left;border:3px solid transparent;border-radius:23px;padding:15px;min-height:164px;box-shadow:0 7px 0 #d9cdd433;transition:transform .15s,border-color .15s;background:#f8dce9; }
+.car-option:active { transform:scale(.985); }
+.car-option.active { border-color:#51465b; }
+.car-option.theme-purple { background:#e4d8fb; }
+.car-option.theme-green { background:#d7efce; }
+.car-option.theme-orange { background:#ffdfbf; }
+.car-option-top { display:flex;justify-content:space-between;align-items:center;width:100%; }
+.car-option-top > span:first-child { font-size:27px; }
+.seat-occupancy { font:800 10px 'Nunito',sans-serif;background:#ffffffa8;border-radius:100px;padding:5px 8px; }
+.mini-car { font-size:36px;line-height:1.3;margin:auto auto 3px;filter:drop-shadow(0 5px 0 #fff7); }
+.car-option b { font:700 20px 'Fredoka',sans-serif; }
+.car-option small { font:700 10px 'Nunito',sans-serif;color:#685d70; }
+.selection-panel { background:#fff;border-radius:25px;padding:21px 17px;margin-top:24px;box-shadow:0 10px 27px #dabed025; }
+.section-heading.compact { margin:0 0 17px; }
+.section-heading.compact h2 { margin:14px 0 4px;font-size:20px; }
+.seats-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
+.seat-option { border:2px solid #f2e6ef;background:#fffafb;border-radius:17px;min-height:112px;display:flex; flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px; }
+.seat-option.selected { border-color:#f08aac;background:#fff0f6; }
+.seat-option.taken { color:#aaa3ae;background:#f5f3f5;border-color:#f0eef1; }
+.seat-number { font-size:23px; }
+.seat-option b { font:700 17px 'Fredoka',sans-serif; }
+.seat-option small { font-size:10px; }
+.join-name-form { margin-top:17px; background:#fff7ef;border-radius:15px;padding:14px; }
+.join-name-form input { background:#fff;margin-bottom:13px; }
+.seat-hint { text-align:center;padding:19px 5px 5px;color:#9c92a0;font-size:11px; }
+/* Playing */
+.game-main { padding-bottom:35px; }
+.game-welcome { display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 17px; }
+.eyebrow-text { display:block;font:900 10px 'Nunito',sans-serif;color:#ac8194;letter-spacing:1.5px;margin-bottom:4px; }
+.game-welcome h1 { font:700 clamp(26px,7vw,36px) 'Fredoka','Prompt',sans-serif;margin:0; }
+.game-welcome p { color:#8d8393;font-size:12px;margin:4px 0 0; }
+.little-divider { padding:0 5px; color:#e99bb1; }
+.avatar-bubble {font-size:43px;width:78px;height:78px;display:grid;place-items:center;background:#f7dce5;border-radius:29px;transform:rotate(-6deg);box-shadow:0 5px 0 #f6c3d4; }
+.room-banner { display:flex;align-items:center;justify-content:space-between;gap:10px;background:#524964;border-radius:21px;color:#fff;padding:14px 16px; }
+.room-banner small { display:block;color:#dcd0e8;letter-spacing:1.4px;font:800 9px 'Nunito'; }
+.room-banner strong { display:block;font:700 25px 'Fredoka';letter-spacing:4px;margin-top:3px; }
+.light-pill { border:0;background:#fff0f4;border-radius:11px;padding:9px 11px;display:flex;align-items:center;gap:5px;color:#59445c;font-size:11px;font-weight:600; }
+.tabbar { display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f5e8ee;border-radius:16px;padding:6px;margin:19px 0 22px; }
+.tabbar button { border:0;background:transparent;padding:12px 3px;border-radius:12px;font-weight:600;font-size:12px;color:#938494; }
+.tabbar button.active {background:#fff;color:#51465e;box-shadow:0 3px 11px #8e62841c;}
+.tabbar span {font:800 9px 'Nunito';background:#f2e9f1;border-radius:99px;padding:3px 5px;}
+.my-missions-header h2 {font-size:23px;margin:13px 0 5px;}
+.my-missions-header h2 span {font:600 13px 'Prompt',sans-serif;color:#ec82a0; }
+.my-missions-header p {font-size:11px;line-height:1.9;color:#8e8390;margin:0 0 16px;}
+.mission-stack { display:grid;gap:17px; }
+.mission-card { background:#decdf8;border-radius:24px;padding:17px 18px 18px;box-shadow:0 7px 0 #cbb8e2, 0 13px 24px #b99bca25;min-height:257px; }
+.mission-card.tone-1 { background:#ffcbd8;box-shadow:0 7px 0 #f5aec2, 0 13px 24px #f4afc625; }
+.mission-card.tone-2 { background:#d1e9c4;box-shadow:0 7px 0 #b8dcae, 0 13px 24px #b1d5ac25; }
+.mission-card.done { filter:saturate(.82); }
+.mission-card-top { display:flex;justify-content:space-between;gap:8px;font:900 10px 'Nunito';letter-spacing:1.3px; }
+.mission-card-status {background:#ffffff7a;padding:4px 9px;border-radius:50px;font-size:9px; }
+.card-cover { width:100%;min-height:198px;border:0;display:flex; flex-direction:column;align-items:center;justify-content:center;text-align:center;background:transparent;color:inherit; }
+.card-art { font-size:74px;line-height:1.2;display:block;filter:drop-shadow(0 8px 0 #ffffff71); }
+.card-art.small {font-size:44px;filter:none;}
+.card-sparkle {font-size:21px;color:#fff5;letter-spacing:16px;margin:4px 0;}
+.reveal-label {display:flex;align-items:center;gap:7px;background:#fffefa;border-radius:50px;padding:10px 15px;font-weight:600;font-size:12px;margin-top:11px;box-shadow:0 4px 0 #fff8;}
+.card-cover small {font-size:10px;color:#685a79;margin-top:10px;}
+.card-content {min-height:202px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;padding:8px 2px 1px;}
+.card-content p {font-size:15px;font-weight:600;line-height:1.9;margin:4px auto 8px;max-width:390px;}
+.card-actions {display:flex;align-items:center;justify-content:space-between;gap:5px;align-self:stretch;margin-top:auto;padding-top:8px;}
+.card-done-line {background:#ffffffe3;border-radius:12px;padding:10px 12px;color:#5d8664;font-size:11px;display:flex;gap:6px;align-items:center;justify-content:center;}
+.progress-summary {margin:26px 0 18px;background:#fff;border-radius:20px;padding:18px;box-shadow:0 4px 23px #ebd4e138;}
+.progress-summary > div:first-child {display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;}
+.progress-summary span {font:900 10px 'Nunito';letter-spacing:1.2px;color:#a08496;}
+.progress-summary strong {font:800 12px 'Nunito';}
+.progress-track {height:9px;border-radius:100px;background:#ffffffc9;overflow:hidden;}
+.progress-track span {display:block;height:100%;width:0;background:#78ba9e;border-radius:100px;transition:width .35s;}
+.progress-summary .progress-track {background:#f4e6ee;}
+.progress-summary .progress-track span {background:#ec88a4;}
+.board-cta {width:100%;}
+.game-bottom {text-align:center;font:800 10px 'Nunito';letter-spacing:1.5px;color:#c2a1b1;margin-top:30px;}
+.game-bottom span {font-size:19px;vertical-align:middle;}
+.game-bottom p {font:400 11px 'Prompt';letter-spacing:0;color:#9d95a1;margin:12px 0;}
+.subtle-link {border:0;color:#9a8ca0;background:none;text-decoration:underline;font-size:10px;padding:6px;}
+/* Live Board */
+.head-row {display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:15px;}
+.head-row h2 {font-size:21px;margin:0;}
+.live-indicator {display:flex;align-items:center;gap:5px;background:#f1e6e9;padding:7px 10px;border-radius:100px;font:800 9px 'Nunito';letter-spacing:1px;color:#998892;}
+.live-indicator > span {width:7px;height:7px;border-radius:50%;background:#b9a9b4;}
+.live-indicator.online {color:#428f6e;background:#e8f6ed;}
+.live-indicator.online > span {background:#41b67d;animation:pulse 1.4s infinite;}
+@keyframes pulse {50%{opacity:.35;}}
+.score-cars {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.score-car {padding:16px 14px;border-radius:19px;background:#f8dce9;}
+.score-car.theme-purple {background:#e4d8fb;}
+.score-car.theme-green {background:#d7efce;}
+.score-car.theme-orange {background:#ffdfbf;}
+.score-car-top {display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:16px;}
+.score-car-top > span {font:900 11px 'Nunito';white-space:nowrap;}
+.score-car-top strong {font:700 30px 'Fredoka';line-height:1;}
+.score-car-top small {font:600 13px 'Fredoka';opacity:.58;}
+.score-car .progress-track {height:10px;margin-bottom:9px;}
+.score-car .progress-track span {background:#51445a;}
+.score-car > small {font:700 10px 'Nunito';opacity:.7;}
+.feed-section {margin-top:30px;}
+.feed-count {font:800 11px 'Nunito';color:#d66a91;background:#ffecf1;border-radius:100px;padding:8px 10px;white-space:nowrap;}
+.empty-feed {display:flex;flex-direction:column;align-items:center;text-align:center;border:2px dashed #f0dbe5;border-radius:23px;padding:30px 20px;background:#fffafc;}
+.empty-feed > span {font-size:60px;}
+.empty-feed h3 {margin:5px 0 5px;font-size:16px;}
+.empty-feed p {font-size:12px;line-height:1.8;color:#9a8e9e;margin:0;}
+.feed-list {display:grid;gap:11px;}
+.feed-item {display:flex;align-items:flex-start;gap:12px;background:#fff;border:1px solid #f6edf1;border-radius:18px;padding:13px 11px;box-shadow:0 3px 11px #d4b5c227;}
+.feed-sticker {display:grid;place-items:center;background:#f8e6f0;border-radius:13px;width:47px;height:47px;font-size:30px;flex:none;}
+.feed-detail {min-width:0;flex:1;}
+.feed-meta {display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.feed-meta strong {font-size:12px;}
+.feed-meta > span {font:800 10px 'Nunito';background:#f4edf3;padding:4px 7px;border-radius:99px;color:#7c7181;}
+.feed-detail p {font-size:12px;font-weight:500;line-height:1.8;margin:6px 0 3px;}
+.feed-detail small {color:#a9a0ad;font-size:10px;}
+.feed-check {display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#daf2d9;color:#399a70;flex:none;}
+.roster-section {margin-top:27px;}
+.roster-car {padding:15px;background:#fff;border-radius:17px;margin-bottom:10px;}
+.roster-car h3 {display:flex;justify-content:space-between;margin:0 0 10px;font:700 16px 'Fredoka',sans-serif;}
+.roster-car h3 span {font:700 10px 'Nunito';color:#9f95a0;}
+.roster-list {display:grid;gap:6px;}
+.roster-player {display:flex;align-items:center;gap:8px;padding:4px 0;}
+.roster-avatar {display:grid;place-items:center;font-size:17px;width:27px;height:27px;background:#fcecf2;border-radius:10px;}
+.roster-name {flex:1;font-size:12px;}
+.roster-progress {font:800 12px 'Nunito';color:#5e9c80;}
+/* Dialog / Toast */
+.dialog-backdrop {position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:20px;background:#2e223f99;backdrop-filter:blur(3px);}
+.confirm-dialog {width:min(100%,400px);background:#fffdfa;border-radius:26px;text-align:center;padding:23px;box-shadow:0 18px 50px #291d3650;}
+.dialog-emoji {font-size:57px;margin:0 0 8px;}
+.confirm-dialog h2 {font-size:19px;margin:0 0 7px;}
+.confirm-dialog p {font-size:12px;color:#857d8a;line-height:1.85;margin:0 0 10px;}
+.confirm-dialog p b {color:#e16a8a;}
+.dialog-task {background:#faf0f5;padding:13px;border-radius:13px;font-size:13px;line-height:1.7;font-weight:600;}
+.dialog-buttons {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;}
+.dialog-buttons .btn {font-size:12px;}
+.toast {position:fixed;bottom:max(24px, env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 30px);background:#494055;box-shadow:0 6px 24px #5240554d;border-radius:13px;padding:13px 17px;color:#fff;z-index:99;font-size:12px;text-align:center;}
+.toast.bad {background:#a83d67;}
+.spinner {width:17px;height:17px;border:2px solid #fff8;border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin {to{transform:rotate(360deg)}}
+/* Setup screen */
+.setup-area {padding:40px 0;}
+.card-paper {background:#fff;border-radius:24px;box-shadow:0 13px 35px #d8b9c439;padding:28px;}
+.setup-card .giant-emoji {font-size:53px;}
+.setup-card h1 {font-size:24px;margin:10px 0;}
+.setup-card p {font-size:13px;line-height:1.8;color:#736879;}
+.setup-card ol {padding-left:25px;font-size:12px;line-height:2.4;}
+.setup-card code,.mini-code {font:600 12px monospace;color:#8e5c90;}
+.mini-code {background:#f5eaf3;border-radius:12px;padding:14px;line-height:2;overflow-wrap:anywhere;}
+.small-note {font-size:11px!important;}
+@media (max-width:370px) {
+  .container {width:calc(100% - 24px);}
+  .topbar {min-height:72px;}
+  .topbar-badge {font-size:8px;padding:7px;}
+  .brand {font-size:13px;}
+  .room-code-bar strong,.room-banner strong {font-size:20px;}
+  .mission-card {padding:15px 13px;}
+  .btn.compact-btn {font-size:10px;padding:7px;}
+}
+@media(min-width:690px){
+  .topbar {min-height:90px;}
+  .welcome-hero {padding-top:10px;}
+  .hero-illustration {max-width:410px;}
+  .car-option {min-height:180px;}
+  .mission-stack {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .mission-stack > :last-child:nth-child(odd) {grid-column:1/-1;}
+}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}}
+
+/* Real-time mission reveal: visible even while teammates are on My Cards. */
+.reveal-toast { position:fixed; z-index:15; top:88px; left:50%; transform:translateX(-50%);
+  display:flex;gap:11px;align-items:flex-start;width:min(460px,calc(100% - 26px));
+  border:2px solid #f8c2d0;background:#fffdfb;border-radius:20px;padding:13px 12px;
+  box-shadow:0 14px 35px #9c597044;animation:reveal-in .3s ease-out; }
+@keyframes reveal-in {from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
+.reveal-emoji {display:grid;place-items:center;flex:none;background:#ffebba;border-radius:14px;width:39px;height:39px;font-size:23px;}
+.reveal-copy {min-width:0;flex:1;}
+.reveal-copy strong {display:block;font-size:13px;}
+.reveal-copy small {display:block;font-size:10px;color:#a2798d;margin:2px 0 4px;}
+.reveal-copy p {margin:0 0 5px;font-size:11px;line-height:1.65;}
+.reveal-copy button {border:0;padding:2px 0;background:none;color:#d26488;font-weight:700;font-size:10px;}
+.reveal-close {display:grid;place-items:center;flex:none;border:0;border-radius:50%;width:26px;height:26px;background:#fbe7f0;color:#9e6b80;}
