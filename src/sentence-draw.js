@@ -1,0 +1,385 @@
+const EMPTY_SENTENCES = ['', '', ''];
+
+export function createSentenceDraw({
+  db, safe, icon, header, modeNav, codeOnly, onRender, toast, errorMessage,
+}) {
+  const state = {
+    busy: false,
+    roomCode: '',
+    roomId: '',
+    status: 'lobby',
+    generation: 1,
+    isHost: false,
+    hasPlayer: false,
+    hasSubmitted: false,
+    joinedCount: 0,
+    submittedCount: 0,
+    currentRound: 0,
+    remainingCount: 48,
+    mySentences: [...EMPTY_SENTENCES],
+    currentSentences: [],
+    history: [],
+    live: 'connecting',
+    confirmReset: false,
+  };
+  let channel = null;
+  let refreshTimer = null;
+  let refreshing = false;
+  let refreshQueued = false;
+
+  const normalizedSentences = (items) => {
+    const result = [...EMPTY_SENTENCES];
+    (items || []).forEach((item) => {
+      const index = Number(item.slot) - 1;
+      if (index >= 0 && index < 3) result[index] = item.text || '';
+    });
+    return result;
+  };
+
+  const applyRoom = (room) => {
+    state.roomCode = room.code;
+    state.roomId = room.id;
+    state.status = room.status;
+    state.generation = Number(room.generation || 1);
+    state.isHost = Boolean(room.is_host);
+    state.hasPlayer = Boolean(room.has_player);
+    state.hasSubmitted = Boolean(room.has_submitted);
+    state.joinedCount = Number(room.joined_count || 0);
+    state.submittedCount = Number(room.submitted_count || 0);
+    state.currentRound = Number(room.current_round || 0);
+    state.remainingCount = Number(room.remaining_count ?? 48);
+    state.mySentences = normalizedSentences(room.my_sentences);
+    state.currentSentences = room.current_sentences || [];
+    state.history = room.history || [];
+  };
+
+  const runBusy = async (task) => {
+    if (state.busy) return;
+    state.busy = true;
+    onRender();
+    try {
+      await task();
+    } catch (error) {
+      console.error(error);
+      toast(errorMessage(error), true);
+    } finally {
+      state.busy = false;
+      onRender();
+    }
+  };
+
+  const setRoomUrl = () => {
+    const url = new URL(location.href);
+    url.searchParams.set('mode', 'sentences');
+    url.searchParams.set('room', state.roomCode);
+    history.replaceState(null, '', url);
+    localStorage.setItem('sentence_draw_room_code', state.roomCode);
+  };
+
+  const stop = () => {
+    clearTimeout(refreshTimer);
+    if (channel && db) db.removeChannel(channel);
+    channel = null;
+    state.live = 'connecting';
+  };
+
+  const refresh = async () => {
+    if (!state.roomCode || refreshing) {
+      if (refreshing) refreshQueued = true;
+      return;
+    }
+    refreshing = true;
+    const code = state.roomCode;
+    try {
+      const { data, error } = await db.rpc('sentence_draw_room_status', { p_code: code });
+      if (error) throw error;
+      if (state.roomCode !== code) return;
+      applyRoom(data);
+      onRender();
+    } catch (error) {
+      console.warn('Sentence Draw refresh failed:', error);
+      state.live = 'connecting';
+      onRender();
+    } finally {
+      refreshing = false;
+      if (refreshQueued) {
+        refreshQueued = false;
+        setTimeout(refresh, 200);
+      }
+    }
+  };
+
+  const scheduleRefresh = () => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refresh, 140);
+  };
+
+  const subscribe = () => {
+    stop();
+    if (!state.roomId) return;
+    const id = state.roomId;
+    channel = db.channel(`sentence-draw-${id}-${Math.random().toString(16).slice(2, 8)}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'sentence_draw_public_state',
+        filter: `session_id=eq.${id}`,
+      }, scheduleRefresh)
+      .subscribe((status) => {
+        const next = status === 'SUBSCRIBED' ? 'connected' : 'connecting';
+        if (state.live !== next) {
+          state.live = next;
+          onRender();
+        }
+        if (status === 'SUBSCRIBED') scheduleRefresh();
+      });
+  };
+
+  const openRoom = (room) => {
+    applyRoom(room);
+    setRoomUrl();
+    subscribe();
+    onRender();
+  };
+
+  const enter = async (code) => {
+    const normalized = codeOnly(code);
+    if (normalized.length !== 8) throw new Error('รหัสห้องต้องเป็นตัวเลขหรือ A–F จำนวน 8 ตัว');
+
+    let response = await db.rpc('sentence_draw_room_status', { p_code: normalized });
+    if (response.error?.message?.includes('DRAW_NOT_MEMBER')) {
+      response = await db.rpc('sentence_draw_join_room', { p_code: normalized });
+    }
+    if (response.error) throw response.error;
+    openRoom(response.data);
+  };
+
+  const create = async (hostContributes) => {
+    const { data, error } = await db.rpc('sentence_draw_create_room', {
+      p_host_contributes: hostContributes,
+    });
+    if (error) throw error;
+    openRoom(data);
+  };
+
+  const leave = () => {
+    stop();
+    state.roomCode = '';
+    state.roomId = '';
+    state.confirmReset = false;
+    state.currentSentences = [];
+    state.history = [];
+    state.mySentences = [...EMPTY_SENTENCES];
+    localStorage.removeItem('sentence_draw_room_code');
+  };
+
+  const share = async () => {
+    const url = new URL(location.href);
+    url.searchParams.set('mode', 'sentences');
+    url.searchParams.set('room', state.roomCode);
+    const text = `มาร่วมสุ่มประโยคลับกัน! รหัสห้อง ${state.roomCode}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Secret Sentence Draw', text, url: url.toString() });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      toast('คัดลอกลิงก์เชิญแล้ว!');
+    } catch {
+      toast(`Room code: ${state.roomCode}`);
+    }
+  };
+
+  const landingView = () => {
+    const storedCode = new URLSearchParams(location.search).get('room') || '';
+    return `${header('CHOOSE A GAME')}
+      <main class="container sentence-landing">
+        ${modeNav('sentences')}
+        <section class="sentence-intro">
+          <div class="sentence-intro-icon">💬</div>
+          <span class="mini-kicker">16 PLAYERS · 48 SENTENCES · 16 ROUNDS</span>
+          <h1>สุ่มประโยค<span>ลับ</span></h1>
+          <p>ทุกคนส่งคนละ 3 ประโยคแบบส่วนตัว<br>แล้วเปิดพร้อมกันทีละ 3 ประโยคแบบไม่ซ้ำ</p>
+        </section>
+        <section class="welcome-actions sentence-actions">
+          <div class="actions-heading"><span>🎲</span><div><h2>สร้างห้องใหม่</h2><p>ผู้สร้างห้องจะเป็นโฮสต์และควบคุมการสุ่ม</p></div></div>
+          <form id="sentence-create-form">
+            <label class="host-choice"><input type="checkbox" name="host_contributes" checked><span><b>ฉันร่วมส่งประโยคด้วย</b><small>นับเป็น 1 ในผู้เล่น 16 คน</small></span></label>
+            <button class="btn primary big" type="submit" ${state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสร้างห้อง...' : `สร้างห้องสุ่มประโยค ${icon('arrow', 20)}`}</button>
+          </form>
+          <div class="or-line"><span>หรือเข้าห้องของเพื่อน</span></div>
+          <form id="sentence-join-form" class="code-form">
+            <label for="sentence-room-code">ROOM CODE</label>
+            <div class="code-input-row"><input id="sentence-room-code" name="code" type="text" maxlength="8" value="${safe(codeOnly(storedCode))}" placeholder="เช่น 1A2B3C4D" autocomplete="off" required>
+            <button class="btn navy" type="submit" ${state.busy ? 'disabled' : ''}>เข้าห้อง ${icon('arrow', 18)}</button></div>
+          </form>
+        </section>
+        <p class="footer-note">🔒 ก่อนเปิดเผย คุณจะเห็นเฉพาะประโยคของตัวเอง</p>
+      </main>`;
+  };
+
+  const progressView = () => {
+    const ready = state.joinedCount === 16 && state.submittedCount === 16;
+    return `<section class="sentence-progress card-paper">
+      <div class="head-row"><div><span class="eyebrow-text">LOBBY PROGRESS</span><h2>${ready ? 'พร้อมเริ่มสุ่มแล้ว!' : 'กำลังรอทุกคน'}</h2></div>
+        <span class="live-indicator ${state.live === 'connected' ? 'online' : ''}"><span></span>${state.live === 'connected' ? 'LIVE' : 'SYNCING'}</span></div>
+      <div class="sentence-count-grid">
+        <div><strong>${state.joinedCount}<small>/16</small></strong><span>ผู้เล่นเข้าห้อง</span></div>
+        <div><strong>${state.submittedCount}<small>/16</small></strong><span>ส่งครบ 3 ประโยค</span></div>
+        <div><strong>${state.submittedCount * 3}<small>/48</small></strong><span>ประโยคพร้อมสุ่ม</span></div>
+      </div>
+      <div class="lobby-progress-track"><span style="width:${state.submittedCount / 16 * 100}%"></span></div>
+    </section>`;
+  };
+
+  const submissionView = () => {
+    if (!state.hasPlayer) {
+      return `<section class="control-only-card card-paper"><span>🎛️</span><h2>โหมดโฮสต์อย่างเดียว</h2>
+        <p>คุณยังไม่ถูกนับในผู้เล่น 16 คน หากต้องการร่วมส่งประโยคด้วย สามารถเข้าร่วมได้ก่อนห้องเต็ม</p>
+        <button class="btn outline" data-action="sentence-join-player" ${state.joinedCount >= 16 || state.busy ? 'disabled' : ''}>เข้าร่วมเป็นผู้เล่น</button></section>`;
+    }
+
+    return `<section class="sentence-form-card card-paper">
+      <div class="sentence-form-heading"><div><span class="eyebrow-text">PRIVATE · ONLY YOU CAN SEE</span><h2>${state.hasSubmitted ? 'ประโยคของคุณส่งแล้ว ✓' : 'เขียน 3 ประโยคของคุณ'}</h2></div><span class="private-badge">${icon('lock', 14)} ส่วนตัว</span></div>
+      <p>แก้ไขได้จนกว่าโฮสต์จะเริ่มสุ่ม สูงสุดประโยคละ 200 ตัวอักษร</p>
+      <form id="sentence-submission-form">
+        ${state.mySentences.map((sentence, index) => `<label class="sentence-field"><span>ประโยคที่ ${index + 1}<small data-count-for="${index}">${[...sentence].length}/200</small></span>
+          <textarea name="sentence" data-sentence-input="${index}" maxlength="200" rows="3" placeholder="พิมพ์ประโยคลับ..." required>${safe(sentence)}</textarea></label>`).join('')}
+        <button class="btn primary big" data-sentence-submit type="submit" ${state.busy ? 'disabled' : ''}>${state.hasSubmitted ? 'บันทึกการแก้ไข' : 'ส่งประโยคทั้ง 3 ข้อ'} ${icon('tick', 18)}</button>
+      </form>
+      ${state.hasSubmitted ? '<div class="private-confirmation">✓ บันทึกแล้ว · คนอื่นยังมองไม่เห็นข้อความของคุณ</div>' : ''}
+    </section>`;
+  };
+
+  const lobbyView = () => {
+    const ready = state.joinedCount === 16 && state.submittedCount === 16;
+    return `${progressView()}
+      ${submissionView()}
+      ${state.isHost ? `<section class="host-controls card-paper"><span class="host-badge">HOST CONTROL</span>
+        <h2>${ready ? 'ครบ 48 ประโยค พร้อมเปิดรอบแรก' : 'เริ่มได้เมื่อส่งครบ 16 คน'}</h2>
+        <p>${ready ? 'เมื่อเริ่มแล้วจะไม่สามารถเพิ่มผู้เล่นหรือแก้ประโยคได้' : `ยังรออีก ${16 - state.submittedCount} คนส่งประโยคให้ครบ`}</p>
+        <button class="btn primary big" data-action="sentence-draw" ${!ready || state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสุ่ม...' : `เริ่มสุ่ม 3 ประโยค ${icon('shuffle', 20)}`}</button>
+      </section>` : '<div class="waiting-callout">⏳ ส่งประโยคแล้วรอโฮสต์เริ่มเกม หน้านี้จะอัปเดตอัตโนมัติ</div>'}`;
+  };
+
+  const drawView = () => {
+    const finished = state.status === 'finished';
+    return `<section class="draw-stage">
+      <div class="draw-stage-head"><div><span class="eyebrow-text">SECRET SENTENCE DRAW</span><h1>${finished ? 'ครบทั้ง 48 ประโยคแล้ว!' : `รอบที่ ${state.currentRound}`}</h1></div>
+        <div class="remaining-pill"><strong>${state.remainingCount}</strong><span>เหลือ</span></div></div>
+      <div class="sentence-reveal-grid">
+        ${state.currentSentences.map((item, index) => `<article class="sentence-reveal-card reveal-tone-${index}"><span>${String(index + 1).padStart(2, '0')}</span><p>${safe(item.text)}</p></article>`).join('')}
+      </div>
+      ${finished ? '<div class="finished-callout">🏁 สุ่มครบ 16 รอบแล้ว ทุกประโยคถูกเปิดเผยครั้งเดียว</div>' : ''}
+      ${state.isHost ? `<section class="host-draw-controls">
+        ${!finished ? `<button class="btn primary big" data-action="sentence-draw" ${state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสุ่ม...' : `สุ่มต่ออีก 3 ประโยค ${icon('shuffle', 20)}`}</button>` : ''}
+        <button class="btn outline board-cta" data-action="sentence-reset-open">เริ่มเกมใหม่ / รีเซ็ต</button>
+      </section>` : `<div class="waiting-callout">${finished ? 'เกมจบแล้ว 🎉' : 'รอโฮสต์สุ่มรอบถัดไป หน้านี้จะอัปเดตอัตโนมัติ'}</div>`}
+      ${state.isHost && state.history.length ? `<details class="round-history"><summary>ดูประวัติ ${state.history.length} รอบ</summary>
+        <div>${state.history.map((round) => `<section><h3>รอบที่ ${round.round}</h3><ol>${(round.sentences || []).map((item) => `<li>${safe(item.text)}</li>`).join('')}</ol></section>`).join('')}</div></details>` : ''}
+    </section>`;
+  };
+
+  const resetDialog = () => state.confirmReset ? `<div class="dialog-backdrop" role="presentation"><div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+    <div class="dialog-emoji">↻</div><h2 id="reset-title">เริ่มเกมใหม่ใช่ไหม?</h2>
+    <p>ประโยคและประวัติการสุ่มของโหมดนี้จะถูกล้าง ผู้เล่นทั้ง 16 คนจะยังอยู่ในห้องและต้องส่งประโยคใหม่</p>
+    <div class="dialog-buttons"><button class="btn outline" data-action="sentence-reset-cancel">ยกเลิก</button>
+      <button class="btn primary" data-action="sentence-reset-confirm" ${state.busy ? 'disabled' : ''}>ยืนยันรีเซ็ต</button></div>
+  </div></div>` : '';
+
+  const roomView = () => `${header('SECRET SENTENCE DRAW', true)}
+    <main class="container sentence-room">
+      <div class="sentence-room-title"><div><span class="eyebrow-text">${state.isHost ? 'YOU ARE THE HOST' : 'PLAYER MODE'}</span><h1>สุ่มประโยคลับ <span>💬</span></h1></div>
+        <span class="live-indicator ${state.live === 'connected' ? 'online' : ''}"><span></span>${state.live === 'connected' ? 'LIVE' : 'SYNCING'}</span></div>
+      <div class="room-banner"><div><small>ROOM CODE</small><strong>${safe(state.roomCode)}</strong></div><button data-action="sentence-share" class="light-pill">${icon('copy', 16)} เชิญเพื่อน</button></div>
+      ${state.status === 'lobby' ? lobbyView() : drawView()}
+      <div class="game-bottom"><span>💬</span> PRIVATE FIRST, FUN TOGETHER <span>🎲</span>
+        <button class="subtle-link" data-action="home">ออกจากห้อง / กลับหน้าแรก</button></div>
+    </main>${resetDialog()}`;
+
+  const view = () => state.roomCode ? roomView() : landingView();
+
+  const handleClick = async (action) => {
+    if (!action.startsWith('sentence-')) return false;
+    if (state.busy && !action.endsWith('cancel')) return true;
+
+    if (action === 'sentence-share') await share();
+    if (action === 'sentence-reset-open') { state.confirmReset = true; onRender(); }
+    if (action === 'sentence-reset-cancel') { state.confirmReset = false; onRender(); }
+    if (action === 'sentence-join-player') {
+      await runBusy(async () => {
+        const { data, error } = await db.rpc('sentence_draw_join_room', { p_code: state.roomCode });
+        if (error) throw error;
+        applyRoom(data);
+        toast('เข้าร่วมเป็นผู้เล่นแล้ว ส่ง 3 ประโยคได้เลย');
+      });
+    }
+    if (action === 'sentence-draw') {
+      await runBusy(async () => {
+        const { data, error } = await db.rpc('sentence_draw_draw', {
+          p_code: state.roomCode, p_expected_round: state.currentRound,
+        });
+        if (error) throw error;
+        applyRoom(data);
+      });
+    }
+    if (action === 'sentence-reset-confirm') {
+      await runBusy(async () => {
+        const { data, error } = await db.rpc('sentence_draw_reset', { p_code: state.roomCode });
+        if (error) throw error;
+        state.confirmReset = false;
+        applyRoom(data);
+        toast('เริ่มเกมใหม่แล้ว ทุกคนส่งประโยคชุดใหม่ได้เลย');
+      });
+    }
+    return true;
+  };
+
+  const handleSubmit = async (form) => {
+    if (!form.id.startsWith('sentence-')) return false;
+    if (form.id === 'sentence-create-form') {
+      const data = new FormData(form);
+      await runBusy(() => create(data.has('host_contributes')));
+    }
+    if (form.id === 'sentence-join-form') {
+      const code = new FormData(form).get('code');
+      await runBusy(() => enter(code));
+    }
+    if (form.id === 'sentence-submission-form') {
+      const sentences = new FormData(form).getAll('sentence').map((value) => String(value).trim());
+      if (sentences.length !== 3 || sentences.some((text) => !text || [...text].length > 200)) {
+        toast('กรุณากรอกทั้ง 3 ประโยค ประโยคละไม่เกิน 200 ตัวอักษร', true);
+        return true;
+      }
+      await runBusy(async () => {
+        const { data, error } = await db.rpc('sentence_draw_save_submission', {
+          p_code: state.roomCode, p_sentences: sentences,
+        });
+        if (error) throw error;
+        applyRoom(data);
+        toast('บันทึก 3 ประโยคแล้ว ข้อความยังเป็นส่วนตัว');
+      });
+    }
+    return true;
+  };
+
+  const handleInput = (target) => {
+    if (!target.matches('[data-sentence-input]')) return false;
+    const form = target.closest('form');
+    const fields = [...form.querySelectorAll('[data-sentence-input]')];
+    fields.forEach((field) => {
+      const count = [...field.value].length;
+      form.querySelector(`[data-count-for="${field.dataset.sentenceInput}"]`).textContent = `${count}/200`;
+    });
+    const submit = form.querySelector('[data-sentence-submit]');
+    submit.disabled = fields.length !== 3 || fields.some((field) => !field.value.trim() || [...field.value].length > 200);
+    return true;
+  };
+
+  return {
+    state, view, enter, refresh, stop, leave, handleClick, handleSubmit, handleInput,
+    isBusy: () => state.busy,
+  };
+}

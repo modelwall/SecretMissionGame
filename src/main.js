@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { createSentenceDraw } from './sentence-draw.js';
 import './style.css';
 
 const $app = document.querySelector('#app');
@@ -16,7 +17,7 @@ const CARS = [
   { n: 4, color: 'orange', label: 'Road Runners', emoji: '🏎️' },
 ];
 const state = {
-  screen: 'welcome', busy: false, user: null, roomCode: '', roomId: '',
+  screen: 'welcome', mode: 'missions', busy: false, user: null, roomCode: '', roomId: '',
   seats: [], selectedCar: 1, selectedSeat: null, player: null,
   players: [], assignments: [], tab: 'cards',
   live: 'connecting', flipped: new Set(), confirming: null, latestReveal: null, error: '',
@@ -40,8 +41,17 @@ const errorMessage = (err) => {
   if (text.includes('INVALID_NICKNAME')) return 'กรุณาตั้งชื่อเล่น 2–24 ตัวอักษร';
   if (text.includes('NOT_YOUR_MISSION')) return 'สามารถกดสำเร็จได้เฉพาะภารกิจของตัวเอง';
   if (text.includes('NOT_ENOUGH_MISSIONS')) return 'ภารกิจในระบบไม่เพียงพอ กรุณาติดต่อผู้ดูแล';
+  if (text.includes('DRAW_ROOM_NOT_FOUND')) return 'ไม่พบห้องสุ่มประโยคนี้ ลองตรวจรหัสอีกครั้ง';
+  if (text.includes('DRAW_ROOM_FULL')) return 'ห้องนี้มีผู้เล่นครบ 16 คนแล้ว';
+  if (text.includes('DRAW_ROOM_STARTED') || text.includes('DRAW_SUBMISSIONS_LOCKED')) return 'เกมเริ่มแล้ว ไม่สามารถเข้าห้องหรือแก้ประโยคได้';
+  if (text.includes('DRAW_NOT_PLAYER')) return 'โฮสต์ต้องเข้าร่วมเป็นผู้เล่นก่อนจึงจะส่งประโยคได้';
+  if (text.includes('DRAW_NOT_HOST')) return 'เฉพาะโฮสต์ของห้องเท่านั้นที่สั่งสุ่มหรือรีเซ็ตได้';
+  if (text.includes('DRAW_NOT_READY')) return 'ต้องมีผู้เล่น 16 คน และทุกคนส่งครบ 3 ประโยคก่อนเริ่ม';
+  if (text.includes('DRAW_FINISHED')) return 'สุ่มครบทั้ง 48 ประโยคแล้ว';
+  if (text.includes('INVALID_SENTENCES')) return 'กรุณากรอกทั้ง 3 ประโยค ประโยคละ 1–200 ตัวอักษร';
+  if (text.includes('DRAW_NOT_MEMBER')) return 'คุณยังไม่ได้เข้าร่วมห้องสุ่มประโยคนี้';
   if (text.includes('Anonymous sign-ins are disabled')) return 'ยังไม่ได้เปิด Anonymous Sign-Ins ใน Supabase';
-  if (text.includes('Could not find the function')) return 'ยังไม่ได้รันไฟล์ supabase/schema.sql ใน Supabase SQL Editor';
+  if (text.includes('Could not find the function')) return 'ฐานข้อมูลยังไม่พร้อม กรุณารัน schema.sql และ sentence_draw_migration.sql ใน Supabase';
   if (text.includes('Failed to fetch') || text.includes('NetworkError')) return 'ไม่สามารถเชื่อมต่ออินเทอร์เน็ต ลองใหม่อีกครั้ง';
   return text || 'เกิดข้อผิดพลาด กรุณาลองใหม่';
 };
@@ -79,15 +89,23 @@ const header = (title = 'Road Trip Club', back = false) => `<header class="topba
   <button class="logo-button" data-action="home" aria-label="หน้าหลัก"><span class="logo-mark">🎮</span><span class="brand">SECRET<span>MISSION</span></span></button>
   ${back ? `<button class="text-button muted" data-action="home">${icon('back',16)} หน้าแรก</button>` : `<span class="topbar-badge">✦ ${safe(title)}</span>`}
 </header>`;
+const modeNav = (active) => `<nav class="mode-nav" aria-label="เลือกโหมดเกม">
+  <button class="${active==='missions'?'active':''}" data-action="select-mode" data-mode="missions"><span>🎮</span><b>Secret Mission</b><small>การ์ดภารกิจ</small></button>
+  <button class="${active==='sentences'?'active':''}" data-action="select-mode" data-mode="sentences"><span>💬</span><b>สุ่มประโยคลับ</b><small>Secret Sentence Draw</small></button>
+</nav>`;
 const wave = () => `<div class="blob-decoration b1"></div><div class="blob-decoration b2"></div>`;
 const button = (label,action, extra='',attrs='') => `<button class="btn ${extra}" data-action="${action}" ${attrs}>${label}</button>`;
 const stepLabel = (n, txt) => `<div class="eyebrow"><span class="step-dot">${n}</span>${txt}</div>`;
 const loadingBtn = (label) => `<button class="btn primary" disabled><span class="spinner"></span>${label}</button>`;
+const sentenceDraw = createSentenceDraw({
+  db, safe, icon, header, modeNav, codeOnly, onRender: () => render(), toast, errorMessage,
+});
 
 function welcomeView() {
   const storedCode = new URLSearchParams(location.search).get('room') || '';
   return `${header('PLAY TOGETHER')}
   <main class="container welcome-main">
+    ${modeNav('missions')}
     <section class="welcome-hero">
       <div class="float-sticker sticker-star">🏁</div><div class="float-sticker sticker-crew">🧑‍🤝‍🧑</div>
       <div class="hero-illustration">${heroCar()}</div>
@@ -113,7 +131,7 @@ function setupView() {
   return `${header('SETUP REQUIRED')}
     <main class="container setup-area"><div class="card-paper setup-card"><span class="giant-emoji">🛠️</span><h1>อีกนิดเดียวก็เล่นได้!</h1>
     <p>เว็บพร้อมแล้ว แต่ต้องเชื่อมกับ Supabase ก่อนจึงจะเล่นแบบ Multiplayer ได้</p>
-    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>supabase/schema.sql</code> ใน SQL Editor</li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
+    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>supabase/schema.sql</code> และ <code>supabase/sentence_draw_migration.sql</code> ใน SQL Editor</li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
     <div class="mini-code">VITE_SUPABASE_URL<br>VITE_SUPABASE_ANON_KEY</div>
     <p class="small-note">ดูขั้นตอนละเอียดในไฟล์ README.md ที่มาพร้อมโปรเจกต์</p></div></main>`;
 }
@@ -233,7 +251,12 @@ function revealNotice() {
   </aside>`;
 }
 function render() {
-  $app.innerHTML = `${wave()}${state.screen==='setup'?setupView():state.screen==='seats'?seatsView():state.screen==='game'?gameView():welcomeView()}${state.screen==='game'?revealNotice():''}`;
+  const content = state.screen==='setup' ? setupView()
+    : state.screen==='sentence' ? sentenceDraw.view()
+    : state.screen==='seats' ? seatsView()
+    : state.screen==='game' ? gameView()
+    : state.mode==='sentences' ? sentenceDraw.view() : welcomeView();
+  $app.innerHTML = `${wave()}${content}${state.screen==='game'?revealNotice():''}`;
 }
 function toast(message, bad=false) {
   document.querySelector('.toast')?.remove();
@@ -347,16 +370,24 @@ async function shareInvite() {
   catch {toast(`Room code: ${state.roomCode}`);}
 }
 function backHome() {
-  stopSubscription();state.screen='welcome';state.roomId='';state.roomCode='';state.player=null;
+  const wasSentence=state.screen==='sentence'||state.mode==='sentences';
+  stopSubscription();sentenceDraw.leave();state.screen='welcome';state.mode=wasSentence?'sentences':'missions';state.roomId='';state.roomCode='';state.player=null;
   state.players=[];state.assignments=[];state.confirming=null;state.latestReveal=null;state.flipped.clear();
   localStorage.removeItem('trip_room_code');
-  history.replaceState(null,'',location.pathname);
+  history.replaceState(null,'',state.mode==='sentences'?`${location.pathname}?mode=sentences`:location.pathname);
   render();
 }
 $app.addEventListener('click',async(e)=>{
-  const el=e.target.closest('[data-action]');if(!el||state.busy)return;
+  const el=e.target.closest('[data-action]');if(!el||state.busy||sentenceDraw.isBusy())return;
   const action=el.dataset.action;
   if(action==='home')return backHome();
+  if(action==='select-mode'){
+    stopSubscription();sentenceDraw.leave();
+    state.mode=el.dataset.mode==='sentences'?'sentences':'missions';state.screen='welcome';
+    history.replaceState(null,'',state.mode==='sentences'?`${location.pathname}?mode=sentences`:location.pathname);
+    render();return;
+  }
+  if(await sentenceDraw.handleClick(action))return;
   if(action==='dismiss-reveal'){state.latestReveal=null;render();return;}
   if(action==='share')return shareInvite();
   if(action==='select-car'){state.selectedCar=Number(el.dataset.car);state.selectedSeat=null;render();return;}
@@ -387,6 +418,7 @@ $app.addEventListener('click',async(e)=>{
   }
 });
 $app.addEventListener('submit',async(e)=>{
+  if(e.target.id.startsWith('sentence-')){e.preventDefault();await sentenceDraw.handleSubmit(e.target);return;}
   if(e.target.id==='join-room-form'){
     e.preventDefault();const code=new FormData(e.target).get('code');
     await withBusy(()=>loadRoom(code));
@@ -403,20 +435,31 @@ $app.addEventListener('submit',async(e)=>{
     });
   }
 });
+$app.addEventListener('input',(e)=>sentenceDraw.handleInput(e.target));
 
 async function init() {
   if(!isConfigured){state.screen='setup';render();return;}
   render();
   try {
     await ensureAuth();
-    const queryCode=new URLSearchParams(location.search).get('room');
-    const recentCode=localStorage.getItem('trip_room_code');
-    const target=queryCode||recentCode;
-    if(target){try{await loadRoom(target);}catch(err){console.warn(err);backHome();toast(errorMessage(err),true);}}
-    else render();
+    const params=new URLSearchParams(location.search);
+    state.mode=params.get('mode')==='sentences'?'sentences':'missions';
+    const queryCode=params.get('room');
+    if(state.mode==='sentences'){
+      const target=queryCode||localStorage.getItem('sentence_draw_room_code');
+      if(target){
+        state.screen='sentence';
+        try{await sentenceDraw.enter(target);}catch(err){console.warn(err);backHome();toast(errorMessage(err),true);}
+      } else render();
+    } else {
+      const target=queryCode||localStorage.getItem('trip_room_code');
+      if(target){try{await loadRoom(target);}catch(err){console.warn(err);backHome();toast(errorMessage(err),true);}}
+      else render();
+    }
   } catch(err){console.error(err);state.screen='setup';render();toast(errorMessage(err),true);}
   setInterval(()=>{
     if(document.visibilityState==='visible' && state.screen==='game') refreshData();
+    if(document.visibilityState==='visible' && state.screen==='sentence') sentenceDraw.refresh();
     if(document.visibilityState==='visible' && state.screen==='seats') {
       db.rpc('trip_room_status',{p_code:state.roomCode}).then(({data})=>{
         if(data && state.screen==='seats' && JSON.stringify(data.seats)!==JSON.stringify(state.seats)){
@@ -427,6 +470,7 @@ async function init() {
   },15000);
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible' && state.screen==='game') scheduleRefresh();
+    if(document.visibilityState==='visible' && state.screen==='sentence') sentenceDraw.refresh();
   });
 }
 init();

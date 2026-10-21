@@ -1,6 +1,13 @@
-# 🍓 Secret Mission — Road Trip Multiplayer
+# 🎮 Secret Mission — Road Trip Multiplayer
 
 เว็บเกมภารกิจลับสำหรับผู้เล่น **16 คน / 4 คันรถ / คันละ 4 คน / คนละ 3 การ์ด** เล่นจากมือถือของตัวเองและดูความคืบหน้าแบบ Live ได้ ด้วย **Vite + Vanilla JavaScript + Supabase Auth/Database/Realtime** หน้าเว็บโฮสต์บน Vercel
+
+โปรเจกต์มี 2 game modes ที่แยก state และข้อมูลออกจากกัน:
+
+- **Secret Mission Cards** — โหมดภารกิจลับบนรถแบบเดิม
+- **สุ่มประโยคลับ / Secret Sentence Draw** — ผู้เล่น 16 คนส่งคนละ 3 ประโยคแบบส่วนตัว และโฮสต์เปิดทีละ 3 แบบไม่ซ้ำจนครบ 48 ประโยค
+
+คู่มือติดตั้ง ความปลอดภัย และ acceptance tests ของโหมดใหม่อยู่ที่ [`SECRET_SENTENCE_DRAW.md`](./SECRET_SENTENCE_DRAW.md)
 
 ## 🎯 กติกาภารกิจ
 
@@ -24,6 +31,10 @@
 2. เปิดไฟล์ [`supabase/schema.sql`](./supabase/schema.sql) ในโปรเจกต์นี้ แล้ว **คัดลอกเนื้อหาทั้งหมด** ไปวางใน SQL Editor
 3. คลิก **Run** แล้วรอข้อความ Success
 4. SQL นี้สร้างตาราง `trip_rooms`, `trip_players`, `trip_mission_bank`, `trip_assignments`; สร้างภารกิจมากกว่า 48 ข้อ, RPCs, สิทธิ์ RLS และเปิดการติดตาม Realtime ของตาราง `trip_players`, `trip_assignments` ให้แล้ว
+
+### เพิ่มโหมดสุ่มประโยคลับใน Project เดิม
+
+หลังจาก `schema.sql` สำเร็จ ให้รัน [`supabase/sentence_draw_migration.sql`](./supabase/sentence_draw_migration.sql) ใน SQL Editor อีกหนึ่งไฟล์ Migration นี้เพิ่มเฉพาะตาราง/RPC `sentence_draw_*` และไม่แตะข้อมูล Secret Mission เดิม จากนั้นรัน [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) เพื่อตรวจ grants, Realtime exposure และ no-repeat invariants
 
 **สำคัญ:** ควรใช้ Supabase Project ใหม่สำหรับเว็บนี้โดยเฉพาะ อย่าใช้ฐานข้อมูลสำคัญที่มีผู้ใช้จริงมาทดลอง SQL โดยไม่สำรองข้อมูล
 
@@ -125,9 +136,13 @@ roadtrip-secret-mission-multiplayer/
 ├── index.html                 # หน้าเว็บ
 ├── src/
 │   ├── main.js                # UI + Supabase Auth/Realtime/RPC
-│   └── style.css              # Mobile-first pastel design
+│   ├── sentence-draw.js       # Secret Sentence Draw UI/state/RPC/Realtime
+│   └── style.css              # Mobile-first casual game design
 ├── supabase/
-│   └── schema.sql             # Database / RLS / RPC / seed missions
+│   ├── schema.sql             # Secret Mission database / RLS / RPC / seed missions
+│   ├── sentence_draw_migration.sql       # Additive migration for Sentence Draw
+│   └── sentence_draw_security_checks.sql # Read-only security/integrity audit
+├── SECRET_SENTENCE_DRAW.md    # Setup, deployment, and acceptance tests
 ├── .env.example               # ตัวอย่างค่าที่ต้องใส่
 ├── .gitignore
 ├── package.json
