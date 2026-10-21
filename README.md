@@ -1,20 +1,20 @@
 # 🎮 Secret Mission — Road Trip Multiplayer
 
-เว็บเกมภารกิจลับสำหรับผู้เล่น **16 คน / 4 คันรถ / คันละ 4 คน / คนละ 3 การ์ด** เล่นจากมือถือของตัวเองและดูความคืบหน้าแบบ Live ได้ ด้วย **Vite + Vanilla JavaScript + Supabase Auth/Database/Realtime** หน้าเว็บโฮสต์บน Vercel
+เว็บเกมภารกิจลับแบบปรับจำนวนผู้เล่น ทีม และโจทย์ได้โดยผู้สร้างห้อง เล่นจากมือถือของตัวเองและดูความคืบหน้าแบบ Live ได้ ด้วย **Vite + Vanilla JavaScript + Supabase Auth/Database/Realtime** หน้าเว็บโฮสต์บน Vercel
 
 โปรเจกต์มี 2 game modes ที่แยก state และข้อมูลออกจากกัน:
 
-- **Secret Mission Cards** — โหมดภารกิจลับบนรถแบบเดิม
-- **สุ่มประโยคลับ / Secret Sentence Draw** — ผู้เล่น 16 คนส่งคนละ 3 ประโยคแบบส่วนตัว และโฮสต์เปิดทีละ 3 แบบไม่ซ้ำจนครบ 48 ประโยค
+- **Secret Mission Cards** — โฮสต์ตั้งผู้เล่น 2–24 คน, รถ/ทีม 1–8 คัน และโจทย์ 1–6 ใบต่อคน (รวมไม่เกิน 72 ใบ)
+- **สุ่มประโยคลับ / Secret Sentence Draw** — โฮสต์ตั้งความจุสูงสุด 2–24 คนและประโยค 1–6 ข้อต่อคน เริ่มก่อนได้เมื่อมีอย่างน้อย 2 คนและทุกคนที่เข้ามาส่งครบ จากนั้นเปิดสูงสุดทีละ 3 แบบไม่ซ้ำ
 
 คู่มือติดตั้ง ความปลอดภัย และ acceptance tests ของโหมดใหม่อยู่ที่ [`SECRET_SENTENCE_DRAW.md`](./SECRET_SENTENCE_DRAW.md)
 
 ## 🎯 กติกาภารกิจ
 
-- 1 คน เลือก 1 คันรถและ 1 Player (1–4) ได้ **3 ภารกิจลับที่ไม่ซ้ำกับคนอื่นในห้อง**
+- 1 คน เลือก 1 คันรถและ 1 Player แล้วรับภารกิจตามจำนวนที่โฮสต์ตั้งไว้ โดย **ไม่ซ้ำกับคนอื่นในห้อง**
 - ระหว่างยังไม่สำเร็จ **เจ้าของภารกิจเท่านั้นที่อ่านโจทย์ได้** (ป้องกันด้วย Supabase Row Level Security)
 - เมื่อเจ้าของกด **“ทำสำเร็จแล้ว”** และกดยืนยัน ระบบจะบันทึกถาวร และ **เปิดเผยโจทย์ให้ทุกคนที่อยู่ในห้อง** เห็นทันทีใน **Live Board → ภารกิจที่โป๊ะแตก** พร้อมชื่อผู้เล่นและคันรถ และมี **แจ้งเตือนโจทย์ใหม่** ถึงคนที่กำลังดูการ์ดตัวเอง
-- แต่ละคันทำสำเร็จได้สูงสุด **12 ใบ** (4 คน × 3 ใบ) และดูคะแนน/12 บน Leaderboard
+- จำนวนที่นั่งถูกกระจายระหว่างรถให้ใกล้เคียงกัน และ Leaderboard คำนวณเป้าหมายของแต่ละรถจากจำนวนที่นั่ง × โจทย์ต่อคน
 - ปรับปรุงแบบ Real-time ผ่าน Supabase Realtime และโหลดซ้ำทุกประมาณ 15 วินาทีเมื่อแท็บเปิดอยู่ เผื่อสัญญาณโทรศัพท์ขาดหาย
 - ผู้เล่นสามารถกดการ์ดของตนเพื่อพลิกดูแล้วซ่อนกลับได้ การกดสำเร็จแล้วไม่สามารถย้อนกลับได้
 
@@ -34,7 +34,11 @@
 
 ### เพิ่มโหมดสุ่มประโยคลับใน Project เดิม
 
-หลังจาก `schema.sql` สำเร็จ ให้รัน [`supabase/sentence_draw_migration.sql`](./supabase/sentence_draw_migration.sql) ใน SQL Editor อีกหนึ่งไฟล์ Migration นี้เพิ่มเฉพาะตาราง/RPC `sentence_draw_*` และไม่แตะข้อมูล Secret Mission เดิม จากนั้นรัน [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) เพื่อตรวจ grants, Realtime exposure และ no-repeat invariants
+หลังจาก `schema.sql` สำเร็จ ให้รันตามลำดับ:
+
+1. [`supabase/sentence_draw_migration.sql`](./supabase/sentence_draw_migration.sql)
+2. [`supabase/flexible_room_settings_migration.sql`](./supabase/flexible_room_settings_migration.sql) เพื่อเพิ่มค่าห้องแบบยืดหยุ่นให้ทั้งสองเกม (ห้องเดิมยังใช้ค่า 16/4/3)
+3. [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) เพื่อตรวจ grants, Realtime exposure และ no-repeat invariants
 
 **สำคัญ:** ควรใช้ Supabase Project ใหม่สำหรับเว็บนี้โดยเฉพาะ อย่าใช้ฐานข้อมูลสำคัญที่มีผู้ใช้จริงมาทดลอง SQL โดยไม่สำรองข้อมูล
 
@@ -87,18 +91,18 @@ npm run dev
 
 Vercel จะติดตั้ง Dependencies, รัน `npm run build` และเสิร์ฟโฟลเดอร์ `dist` ให้โดยอัตโนมัติ
 
-## 📱 6. วิธีเล่นจริงสำหรับ 16 คน
+## 📱 6. วิธีเล่นจริง
 
 **คนจัดทริป**
 
-1. เปิดเว็บ → กด **สร้างห้องใหม่**
+1. เปิดเว็บ → ตั้งจำนวนผู้เล่น รถ/ทีม และโจทย์ต่อคน → กด **สร้างห้องใหม่**
 2. จะได้ **Room Code 8 ตัว** → กด **แชร์ห้อง** ส่งลิงก์เข้า LINE กลุ่ม
-3. เลือก **Car 1–4** และ **Player 1–4** ของตัวเอง แล้วตั้งชื่อเล่น
+3. เลือก Car และ Player ที่ระบบจัดไว้ให้ห้อง แล้วตั้งชื่อเล่น
 
 **เพื่อนแต่ละคน**
 
 1. กดลิงก์ที่ได้รับบนมือถือเครื่องตัวเอง (หรือใส่ Room Code)
-2. เลือกคันและ Player ที่ยังว่าง → ตั้งชื่อเล่น → รับภารกิจลับ 3 ใบ
+2. เลือกคันและ Player ที่ยังว่าง → ตั้งชื่อเล่น → รับภารกิจลับตามจำนวนของห้อง
 3. เปิดดูภารกิจ แล้วพยายามทำให้สำเร็จโดยไม่ให้เพื่อนจับได้
 4. เมื่อสำเร็จ กด **ทำสำเร็จแล้ว** และ **ยืนยัน**
 5. ทุกคนในห้องที่เปิด **Live Board** จะเห็นชื่อ + โจทย์ที่เพิ่งทำสำเร็จ และคะแนนของคันนั้นเพิ่มขึ้นโดยอัตโนมัติ (ไม่ต้องกดรีเฟรช)
@@ -123,7 +127,7 @@ Vercel จะติดตั้ง Dependencies, รัน `npm run build` แ�
 |---|---|
 | หน้าเว็บขึ้น Setup Required | เพิ่ม Environment Variables แล้ว Redeploy |
 | Anonymous sign-ins disabled | ไปเปิด Allow anonymous sign-ins ใน Supabase Auth |
-| Could not find function | รัน `supabase/schema.sql` ให้ครบ |
+| Could not find function | รัน SQL migrations ทั้ง 3 ไฟล์ตามลำดับให้ครบ |
 | เข้าได้ แต่ไม่เห็นคะแนนสด | SQL ต้องเพิ่ม `trip_assignments`, `trip_players` ใน `supabase_realtime`; หน้าเว็บจะ fallback โหลดทุก 15 วินาที |
 | 2 คนเลือก Player เดียวกัน | คนที่กดทีหลังจะได้รับข้อความที่นั่งถูกเลือกแล้ว ให้เลือกช่องอื่น |
 | เปลี่ยนมือถือแล้วการ์ดเดิมหาย | เป็นข้อจำกัดของ Anonymous Auth (session ผูกกับเบราว์เซอร์เดิม) |
@@ -137,10 +141,12 @@ roadtrip-secret-mission-multiplayer/
 ├── src/
 │   ├── main.js                # UI + Supabase Auth/Realtime/RPC
 │   ├── sentence-draw.js       # Secret Sentence Draw UI/state/RPC/Realtime
+│   ├── room-settings.js       # Shared validation and team-capacity rules
 │   └── style.css              # Mobile-first casual game design
 ├── supabase/
 │   ├── schema.sql             # Secret Mission database / RLS / RPC / seed missions
 │   ├── sentence_draw_migration.sql       # Additive migration for Sentence Draw
+│   ├── flexible_room_settings_migration.sql # Flexible host settings for both modes
 │   └── sentence_draw_security_checks.sql # Read-only security/integrity audit
 ├── SECRET_SENTENCE_DRAW.md    # Setup, deployment, and acceptance tests
 ├── .env.example               # ตัวอย่างค่าที่ต้องใส่

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createSentenceDraw } from './sentence-draw.js';
+import { capacityForTeam, isValidMissionSettings } from './room-settings.js';
 import './style.css';
 
 const $app = document.querySelector('#app');
@@ -15,11 +16,16 @@ const CARS = [
   { n: 2, color: 'yellow', label: 'Sunset Van', emoji: '🚐' },
   { n: 3, color: 'green', label: 'Trail Crew', emoji: '🛻' },
   { n: 4, color: 'orange', label: 'Road Runners', emoji: '🏎️' },
+  { n: 5, color: 'blue', label: 'Sky Riders', emoji: '🚗' },
+  { n: 6, color: 'yellow', label: 'Happy Camper', emoji: '🚎' },
+  { n: 7, color: 'green', label: 'Forest Gang', emoji: '🚙' },
+  { n: 8, color: 'orange', label: 'Turbo Friends', emoji: '🏁' },
 ];
 const state = {
   screen: 'welcome', mode: 'missions', busy: false, user: null, roomCode: '', roomId: '',
   seats: [], selectedCar: 1, selectedSeat: null, player: null,
   players: [], assignments: [], tab: 'cards',
+  playerLimit: 16, teamCount: 4, missionsPerPlayer: 3,
   live: 'connecting', flipped: new Set(), confirming: null, latestReveal: null, error: '',
 };
 let liveChannel = null;
@@ -34,6 +40,8 @@ const codeOnly = (v) => String(v ?? '').toUpperCase().replace(/[^0-9A-F]/g, '').
 const doneCount = (playerId) => state.assignments.filter(a => a.player_id === playerId && a.completed_at).length;
 const totalDone = (car) => state.assignments.filter(a => a.completed_at &&
   state.players.find(p => p.id === a.player_id)?.car_number === car).length;
+const activeCars = () => CARS.slice(0, state.teamCount);
+const teamCapacity = (car) => capacityForTeam(state.playerLimit,state.teamCount,car);
 const errorMessage = (err) => {
   const text = (err?.message || String(err || '')).trim();
   if (text.includes('ROOM_NOT_FOUND')) return 'ไม่พบห้องนี้ ลองตรวจรหัสห้องอีกครั้ง';
@@ -42,16 +50,17 @@ const errorMessage = (err) => {
   if (text.includes('NOT_YOUR_MISSION')) return 'สามารถกดสำเร็จได้เฉพาะภารกิจของตัวเอง';
   if (text.includes('NOT_ENOUGH_MISSIONS')) return 'ภารกิจในระบบไม่เพียงพอ กรุณาติดต่อผู้ดูแล';
   if (text.includes('DRAW_ROOM_NOT_FOUND')) return 'ไม่พบห้องสุ่มประโยคนี้ ลองตรวจรหัสอีกครั้ง';
-  if (text.includes('DRAW_ROOM_FULL')) return 'ห้องนี้มีผู้เล่นครบ 16 คนแล้ว';
+  if (text.includes('ROOM_FULL') || text.includes('DRAW_ROOM_FULL')) return 'ห้องนี้มีผู้เล่นครบตามจำนวนที่โฮสต์ตั้งไว้แล้ว';
+  if (text.includes('INVALID_ROOM_SETTINGS') || text.includes('INVALID_DRAW_SETTINGS')) return 'ค่าห้องไม่ถูกต้อง กรุณาตรวจจำนวนผู้เล่น ทีม และโจทย์อีกครั้ง';
   if (text.includes('DRAW_ROOM_STARTED') || text.includes('DRAW_SUBMISSIONS_LOCKED')) return 'เกมเริ่มแล้ว ไม่สามารถเข้าห้องหรือแก้ประโยคได้';
   if (text.includes('DRAW_NOT_PLAYER')) return 'โฮสต์ต้องเข้าร่วมเป็นผู้เล่นก่อนจึงจะส่งประโยคได้';
   if (text.includes('DRAW_NOT_HOST')) return 'เฉพาะโฮสต์ของห้องเท่านั้นที่สั่งสุ่มหรือรีเซ็ตได้';
-  if (text.includes('DRAW_NOT_READY')) return 'ต้องมีผู้เล่น 16 คน และทุกคนส่งครบ 3 ประโยคก่อนเริ่ม';
-  if (text.includes('DRAW_FINISHED')) return 'สุ่มครบทั้ง 48 ประโยคแล้ว';
-  if (text.includes('INVALID_SENTENCES')) return 'กรุณากรอกทั้ง 3 ประโยค ประโยคละ 1–200 ตัวอักษร';
+  if (text.includes('DRAW_NOT_READY')) return 'ต้องมีผู้เล่นอย่างน้อย 2 คน และทุกคนที่เข้าห้องต้องส่งประโยคให้ครบก่อนเริ่ม';
+  if (text.includes('DRAW_FINISHED')) return 'สุ่มครบทุกประโยคแล้ว';
+  if (text.includes('INVALID_SENTENCES')) return 'จำนวนประโยคไม่ครบ หรือมีประโยคยาวเกิน 200 ตัวอักษร';
   if (text.includes('DRAW_NOT_MEMBER')) return 'คุณยังไม่ได้เข้าร่วมห้องสุ่มประโยคนี้';
   if (text.includes('Anonymous sign-ins are disabled')) return 'ยังไม่ได้เปิด Anonymous Sign-Ins ใน Supabase';
-  if (text.includes('Could not find the function')) return 'ฐานข้อมูลยังไม่พร้อม กรุณารัน schema.sql และ sentence_draw_migration.sql ใน Supabase';
+  if (text.includes('Could not find the function')) return 'ฐานข้อมูลยังไม่พร้อม กรุณารัน migration ล่าสุดใน Supabase';
   if (text.includes('Failed to fetch') || text.includes('NetworkError')) return 'ไม่สามารถเชื่อมต่ออินเทอร์เน็ต ลองใหม่อีกครั้ง';
   return text || 'เกิดข้อผิดพลาด กรุณาลองใหม่';
 };
@@ -91,7 +100,7 @@ const header = (title = 'Road Trip Club', back = false) => `<header class="topba
 </header>`;
 const modeNav = (active) => `<nav class="mode-nav" aria-label="เลือกโหมดเกม">
   <button class="${active==='missions'?'active':''}" data-action="select-mode" data-mode="missions"><span>🎮</span><b>Secret Mission</b><small>การ์ดภารกิจ</small></button>
-  <button class="${active==='sentences'?'active':''}" data-action="select-mode" data-mode="sentences"><span>💬</span><b>สุ่มประโยคลับ</b><small>Secret Sentence Draw</small></button>
+  <button class="${active==='sentences'?'active':''}" data-action="select-mode" data-mode="sentences"><span>💬</span><b>Secret Sentence Draw</b><small>สุ่มประโยคลับ</small></button>
 </nav>`;
 const wave = () => `<div class="blob-decoration b1"></div><div class="blob-decoration b2"></div>`;
 const button = (label,action, extra='',attrs='') => `<button class="btn ${extra}" data-action="${action}" ${attrs}>${label}</button>`;
@@ -112,11 +121,20 @@ function welcomeView() {
       <span class="mini-kicker">READY · SET · ROAD TRIP</span>
       <h1>Secret <span>Mission!</span></h1>
       <p>เกมภารกิจลับบนรถ ชวนเพื่อนทำเรื่องฮา ๆ<br>แล้วลุ้นไปด้วยกันตลอดทริป</p>
-      <div class="stats-strip"><span>🚙 <b>4</b> Cars</span><span>🧑‍🤝‍🧑 <b>16</b> Players</span><span>🎮 <b>3</b> Missions</span></div>
+      <div class="stats-strip"><span>🚙 <b>1–8</b> Cars</span><span>🧑‍🤝‍🧑 <b>2–24</b> Players</span><span>🎮 <b>1–6</b> Missions</span></div>
     </section>
     <section class="welcome-actions">
       <div class="actions-heading"><span>🚦</span><div><h2>พร้อมออกทริปกันยัง?</h2><p>สร้างห้องใหม่ หรือใส่โค้ดห้องของเพื่อน</p></div></div>
-      ${state.busy ? loadingBtn('กำลังเชื่อมต่อ...') : button(`สร้างห้องใหม่ ${icon('arrow',20)}`,'create','primary big')}
+      <form id="mission-create-form" class="room-settings-form">
+        <div class="settings-heading"><b>ตั้งค่าห้องของคุณ</b><small>ปรับได้ก่อนสร้างห้อง</small></div>
+        <div class="settings-grid">
+          <label><span>ผู้เล่นทั้งหมด</span><input name="player_limit" type="number" min="2" max="24" value="16" required></label>
+          <label><span>จำนวนรถ / ทีม</span><input name="team_count" type="number" min="1" max="8" value="4" required></label>
+          <label><span>โจทย์ต่อคน</span><input name="missions_per_player" type="number" min="1" max="6" value="3" required></label>
+        </div>
+        <p class="settings-note">ระบบจะแบ่งจำนวนที่นั่งให้แต่ละรถใกล้เคียงกัน และใช้โจทย์ไม่ซ้ำกันในห้อง</p>
+        <button class="btn primary big" type="submit" ${state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสร้างห้อง...' : `สร้างห้องใหม่ ${icon('arrow',20)}`}</button>
+      </form>
       <div class="or-line"><span>หรือเข้าร่วมกับเพื่อน</span></div>
       <form id="join-room-form" class="code-form">
         <label for="room-code">ROOM CODE</label>
@@ -131,34 +149,36 @@ function setupView() {
   return `${header('SETUP REQUIRED')}
     <main class="container setup-area"><div class="card-paper setup-card"><span class="giant-emoji">🛠️</span><h1>อีกนิดเดียวก็เล่นได้!</h1>
     <p>เว็บพร้อมแล้ว แต่ต้องเชื่อมกับ Supabase ก่อนจึงจะเล่นแบบ Multiplayer ได้</p>
-    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>supabase/schema.sql</code> และ <code>supabase/sentence_draw_migration.sql</code> ใน SQL Editor</li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
+    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>supabase/schema.sql</code>, <code>sentence_draw_migration.sql</code> และ <code>flexible_room_settings_migration.sql</code> ใน SQL Editor</li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
     <div class="mini-code">VITE_SUPABASE_URL<br>VITE_SUPABASE_ANON_KEY</div>
     <p class="small-note">ดูขั้นตอนละเอียดในไฟล์ README.md ที่มาพร้อมโปรเจกต์</p></div></main>`;
 }
 function seatsView() {
-  const selected = CARS.find(c=>c.n === state.selectedCar);
+  const selected = activeCars().find(c=>c.n === state.selectedCar) || activeCars()[0];
+  const capacity = teamCapacity(selected.n);
   const occupied = new Set(state.seats.map(s => `${s.car}-${s.seat}`));
   return `${header('PICK YOUR SEAT',true)}<main class="container select-main">
     ${stepLabel('01','CHOOSE YOUR CAR')}
     <div class="section-heading"><h1>รถคันไหนของเธอ? <span>🚗</span></h1><p>เลือกคันรถที่นั่งอยู่ แล้วเลือก Player ของตัวเอง</p></div>
     <div class="room-code-bar"><div><span>ROOM CODE</span><strong>${safe(state.roomCode)}</strong></div>
       <button class="copy-code" data-action="share" aria-label="คัดลอกลิงก์เชิญ">${icon('copy',17)} แชร์ห้อง</button></div>
-    <div class="car-grid">${CARS.map(c=>{
+    <div class="room-config-summary"><span>🧑‍🤝‍🧑 ${state.playerLimit} คน</span><span>🚙 ${state.teamCount} ทีม</span><span>🎮 ${state.missionsPerPlayer} โจทย์/คน</span></div>
+    <div class="car-grid">${activeCars().map(c=>{
       const used=state.seats.filter(x=>x.car===c.n).length;
       return `<button class="car-option theme-${c.color} ${state.selectedCar===c.n?'active':''}" data-action="select-car" data-car="${c.n}">
-        <span class="car-option-top"><span>${c.emoji}</span><span class="seat-occupancy">${used}/4 คน</span></span>
+        <span class="car-option-top"><span>${c.emoji}</span><span class="seat-occupancy">${used}/${teamCapacity(c.n)} คน</span></span>
         <span class="mini-car">🚙</span><b>Car ${c.n}</b><small>${c.label}</small>
       </button>`;
     }).join('')}</div>
     <div class="selection-panel"><div class="section-heading compact">${stepLabel('02',`CAR ${selected.n} · SELECT PLAYER`)}<h2>แล้วเธอเป็น Player ไหน?</h2><p>ช่องที่มีเพื่อนเลือกแล้วจะถูกล็อกไว้</p></div>
-      <div class="seats-grid">${[1,2,3,4].map(i=>{
+      <div class="seats-grid">${Array.from({length:capacity},(_,index)=>index+1).map(i=>{
         const isTaken = occupied.has(`${state.selectedCar}-${i}`);
         return `<button class="seat-option ${isTaken?'taken':''} ${state.selectedSeat===i?'selected':''}" data-action="select-seat" data-seat="${i}" ${isTaken?'disabled':''}>
           <span class="seat-number">${isTaken?'🔒':'⭐'}</span><b>Player ${i}</b><small>${isTaken?'มีเจ้าของแล้ว':state.selectedSeat===i?'เลือกแล้ว ✓':'ว่าง · แตะเพื่อเลือก'}</small></button>`;
       }).join('')}</div>
       ${state.selectedSeat && !occupied.has(`${state.selectedCar}-${state.selectedSeat}`) ? `<form id="join-seat-form" class="join-name-form"><label for="nickname">ชื่อเล่นของคุณ</label>
         <input id="nickname" name="nickname" type="text" maxlength="24" minlength="2" placeholder="เช่น เอิ้ก, อ้อ, เบ้บ" required autocomplete="nickname" />
-        <button class="btn primary big" type="submit" ${state.busy?'disabled':''}>${state.busy?'กำลังรับภารกิจ...':'รับการ์ดภารกิจ 3 ใบ'} ${icon('arrow',19)}</button></form>`:
+        <button class="btn primary big" type="submit" ${state.busy?'disabled':''}>${state.busy?'กำลังรับภารกิจ...':`รับการ์ดภารกิจ ${state.missionsPerPlayer} ใบ`} ${icon('arrow',19)}</button></form>`:
         `<div class="seat-hint">👆 เลือก Player ที่ยังว่างเพื่อรับภารกิจลับของตัวเอง</div>`}
     </div><p class="footer-note">📱 1 Player ต่อ 1 มือถือ · กดสำเร็จแล้วเพื่อนจะเห็นโจทย์</p>
   </main>`;
@@ -180,11 +200,12 @@ function missionCard(a, i) {
 }
 function scoreboard() {
   return `<section class="scoreboard"><div class="head-row"><div><span class="eyebrow-text">THE RACE IS ON</span><h2>Leaderboard 🏆</h2></div><span class="live-indicator ${state.live==='connected'?'online':''}"><span></span>${state.live==='connected'?'LIVE':'SYNCING'}</span></div>
-   <div class="score-cars">${CARS.map(c=>{
+   <div class="score-cars">${activeCars().map(c=>{
      const count = totalDone(c.n); const joined=state.players.filter(p=>p.car_number===c.n).length;
-     return `<div class="score-car theme-${c.color}"><div class="score-car-top"><span>${c.emoji} CAR ${c.n}</span><strong>${count}<small>/12</small></strong></div>
-      <div class="progress-track"><span style="width:${count/12*100}%"></span></div>
-      <small>${joined} / 4 Players joined</small></div>`;
+     const target=teamCapacity(c.n)*state.missionsPerPlayer;
+     return `<div class="score-car theme-${c.color}"><div class="score-car-top"><span>${c.emoji} CAR ${c.n}</span><strong>${count}<small>/${target}</small></strong></div>
+      <div class="progress-track"><span style="width:${target ? count/target*100 : 0}%"></span></div>
+      <small>${joined} / ${teamCapacity(c.n)} Players joined</small></div>`;
    }).join('')}</div></section>`;
 }
 function missionFeed() {
@@ -198,12 +219,12 @@ function missionFeed() {
   </section>`;
 }
 function roster() {
-  return `<section class="roster-section"><div class="head-row"><div><span class="eyebrow-text">WHO'S ON BOARD?</span><h2>สมาชิกทั้ง 4 คัน 🚙</h2></div></div>
-    ${CARS.map(c=>`<div class="roster-car"><h3>${c.emoji} Car ${c.n} <span>${state.players.filter(p=>p.car_number===c.n).length}/4 คน</span></h3>
-      <div class="roster-list">${[1,2,3,4].map(seat=>{
+  return `<section class="roster-section"><div class="head-row"><div><span class="eyebrow-text">WHO'S ON BOARD?</span><h2>สมาชิกทั้ง ${state.teamCount} คัน 🚙</h2></div></div>
+    ${activeCars().map(c=>`<div class="roster-car"><h3>${c.emoji} Car ${c.n} <span>${state.players.filter(p=>p.car_number===c.n).length}/${teamCapacity(c.n)} คน</span></h3>
+      <div class="roster-list">${Array.from({length:teamCapacity(c.n)},(_,index)=>index+1).map(seat=>{
          const p=state.players.find(x=>x.car_number===c.n&&x.seat_number===seat);
          return `<div class="roster-player"><span class="roster-avatar">${p?'🙂':'◌'}</span><span class="roster-name">${p?safe(p.nickname):`Player ${seat} · ยังว่าง`}</span>
-         <span class="roster-progress">${p?`${doneCount(p.id)} / 3 ✓`:'—'}</span></div>`;
+         <span class="roster-progress">${p?`${doneCount(p.id)} / ${state.missionsPerPlayer} ✓`:'—'}</span></div>`;
        }).join('')}</div></div>`).join('')}</section>`;
 }
 function confirmation() {
@@ -224,15 +245,15 @@ function gameView() {
   return `${header('MULTIPLAYER LIVE')}
     <main class="container game-main">
       <div class="game-welcome"><div><span class="eyebrow-text">HELLO, SECRET AGENT ✌</span><h1>Hey, ${safe(state.player?.nickname || 'Player')}!</h1>
-         <p>Car ${state.player?.car_number} · Player ${state.player?.seat_number} <span class="little-divider">✳</span> ${done}/3 missions done</p></div>
+         <p>Car ${state.player?.car_number} · Player ${state.player?.seat_number} <span class="little-divider">✳</span> ${done}/${state.missionsPerPlayer} missions done</p></div>
          <div class="avatar-bubble">🕵️</div></div>
       <div class="room-banner"><div><small>YOUR TRIP ROOM</small><strong>${safe(state.roomCode)}</strong></div><button data-action="share" class="light-pill">${icon('copy',16)} เชิญเพื่อน</button></div>
-      <div class="tabbar" role="tablist"><button role="tab" class="${state.tab==='cards'?'active':''}" data-action="tab" data-tab="cards">🎮 การ์ดของฉัน <span>${done}/3</span></button>
+      <div class="tabbar" role="tablist"><button role="tab" class="${state.tab==='cards'?'active':''}" data-action="tab" data-tab="cards">🎮 การ์ดของฉัน <span>${done}/${state.missionsPerPlayer}</span></button>
         <button role="tab" class="${state.tab==='board'?'active':''}" data-action="tab" data-tab="board">🏆 Live Board <span>${state.assignments.filter(x=>x.completed_at).length}</span></button></div>
-      ${state.tab === 'cards' ? `<div class="my-missions-header">${stepLabel('✦','TOP SECRET · FOR YOUR EYES ONLY')}<h2>ภารกิจของเธอ <span>3 ใบ</span></h2><p>ภารกิจที่ยังไม่สำเร็จเป็นความลับของเธอคนเดียว พอสำเร็จ เพื่อนทุกคนจะเห็นโจทย์ใน Live Board!</p></div>
-         <div class="mission-stack">${mine.length===3 ? mine.map(missionCard).join('') : `<div class="empty-feed"><span>📦</span><p>กำลังเตรียมการ์ดของคุณ ลองโหลดหน้าใหม่อีกครั้ง</p></div>`}</div>
-         <div class="progress-summary"><div><span>YOUR PROGRESS</span><strong>${done} / 3 completed</strong></div>
-            <div class="progress-track"><span style="width:${done/3*100}%"></span></div></div>
+      ${state.tab === 'cards' ? `<div class="my-missions-header">${stepLabel('✦','TOP SECRET · FOR YOUR EYES ONLY')}<h2>ภารกิจของเธอ <span>${state.missionsPerPlayer} ใบ</span></h2><p>ภารกิจที่ยังไม่สำเร็จเป็นความลับของเธอคนเดียว พอสำเร็จ เพื่อนทุกคนจะเห็นโจทย์ใน Live Board!</p></div>
+         <div class="mission-stack">${mine.length===state.missionsPerPlayer ? mine.map(missionCard).join('') : `<div class="empty-feed"><span>📦</span><p>กำลังเตรียมการ์ดของคุณ ลองโหลดหน้าใหม่อีกครั้ง</p></div>`}</div>
+         <div class="progress-summary"><div><span>YOUR PROGRESS</span><strong>${done} / ${state.missionsPerPlayer} completed</strong></div>
+            <div class="progress-track"><span style="width:${done/state.missionsPerPlayer*100}%"></span></div></div>
          <button class="btn outline board-cta" data-action="tab" data-tab="board">ดูภารกิจที่เพื่อนทำสำเร็จ ${icon('arrow',18)}</button>` : `${scoreboard()}${missionFeed()}${roster()}`}
       <div class="game-bottom"><span>🚗</span> KEEP IT FUN, KEEP IT SECRET <span>🏁</span><p>คนขับตั้งใจขับรถนะ ให้ผู้โดยสารเป็นคนเล่น</p>
         <button class="subtle-link" data-action="home">เปลี่ยนห้อง / กลับหน้าแรก</button></div>
@@ -284,6 +305,9 @@ async function loadRoom(code) {
   const {data:room,error:e1}=await db.rpc('trip_room_status',{p_code:normalized});
   if(e1) throw e1;
   state.roomCode=room.code;state.roomId=room.id;state.seats=room.seats||[];
+  state.playerLimit=Number(room.player_limit||16);state.teamCount=Number(room.team_count||4);
+  state.missionsPerPlayer=Number(room.missions_per_player||3);
+  if(state.selectedCar>state.teamCount)state.selectedCar=1;
   const {data:me,error:e2}=await db.from('trip_players').select('*').eq('room_id',room.id).eq('user_id',state.user.id).maybeSingle();
   if(e2) throw e2;
   state.player=me || null;
@@ -297,7 +321,9 @@ async function refreshSeats() {
   if(!state.roomCode) return;
   const {data,error}=await db.rpc('trip_room_status',{p_code:state.roomCode});
   if(error) throw error;
-  state.seats=data.seats||[];render();
+  state.seats=data.seats||[];
+  state.playerLimit=Number(data.player_limit||state.playerLimit);state.teamCount=Number(data.team_count||state.teamCount);
+  state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);render();
 }
 async function refreshData() {
   if(!db || state.screen!=='game' || !state.roomId) return;
@@ -409,16 +435,23 @@ $app.addEventListener('click',async(e)=>{
       toast('สำเร็จแล้ว! โจทย์เปิดเผยให้เพื่อนทั้งห้อง 🎉');
     });return;
   }
-  if(action==='create'){
+});
+$app.addEventListener('submit',async(e)=>{
+  if(e.target.id.startsWith('sentence-')){e.preventDefault();await sentenceDraw.handleSubmit(e.target);return;}
+  if(e.target.id==='mission-create-form'){
+    e.preventDefault();const formData=new FormData(e.target);
+    const playerLimit=Number(formData.get('player_limit'));
+    const teamCount=Number(formData.get('team_count'));
+    const missionsPerPlayer=Number(formData.get('missions_per_player'));
+    if(!isValidMissionSettings(playerLimit,teamCount,missionsPerPlayer)){
+      toast('ตั้งค่าได้สูงสุด 24 คน, 8 ทีม, 6 โจทย์ต่อคน และรวมไม่เกิน 72 โจทย์',true);return;
+    }
     await withBusy(async()=>{
-      const {data,error}=await db.rpc('trip_create_room');if(error)throw error;
+      const {data,error}=await db.rpc('trip_create_room',{p_player_limit:playerLimit,p_team_count:teamCount,p_missions_per_player:missionsPerPlayer});if(error)throw error;
       await loadRoom(data.code);
       toast('สร้างห้องแล้ว! แชร์โค้ดให้เพื่อนได้เลย 🎈');
     });return;
   }
-});
-$app.addEventListener('submit',async(e)=>{
-  if(e.target.id.startsWith('sentence-')){e.preventDefault();await sentenceDraw.handleSubmit(e.target);return;}
   if(e.target.id==='join-room-form'){
     e.preventDefault();const code=new FormData(e.target).get('code');
     await withBusy(()=>loadRoom(code));
@@ -431,7 +464,7 @@ $app.addEventListener('submit',async(e)=>{
       });
       if(error){if(error.message?.includes('SEAT_TAKEN'))await refreshSeats();throw error;}
       state.tab='cards';await loadRoom(state.roomCode);
-      toast('ยินดีต้อนรับ! รับภารกิจลับ 3 ใบแล้ว 🎮');
+       toast(`ยินดีต้อนรับ! รับภารกิจลับ ${state.missionsPerPlayer} ใบแล้ว 🎮`);
     });
   }
 });
@@ -463,7 +496,8 @@ async function init() {
     if(document.visibilityState==='visible' && state.screen==='seats') {
       db.rpc('trip_room_status',{p_code:state.roomCode}).then(({data})=>{
         if(data && state.screen==='seats' && JSON.stringify(data.seats)!==JSON.stringify(state.seats)){
-          state.seats=data.seats;render();
+          state.seats=data.seats;state.playerLimit=Number(data.player_limit||state.playerLimit);
+          state.teamCount=Number(data.team_count||state.teamCount);state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);render();
         }
       });
     }

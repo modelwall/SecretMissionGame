@@ -1,5 +1,5 @@
--- Secret Sentence Draw | read-only security and data-integrity audit
--- Run in Supabase SQL Editor after sentence_draw_migration.sql.
+-- Multiplayer games | read-only security and data-integrity audit
+-- Run after sentence_draw_migration.sql and flexible_room_settings_migration.sql.
 
 -- Private tables must not be directly readable by browser roles.
 do $$
@@ -15,6 +15,22 @@ begin
       raise exception 'Private table % has an unsafe browser SELECT grant',v_table;
     end if;
   end loop;
+end $$;
+
+-- Flexible write RPCs are authenticated-only.
+do $$
+begin
+  if not has_function_privilege(
+    'authenticated','public.trip_create_room(integer,integer,integer)','execute'
+  ) or not has_function_privilege(
+    'authenticated','public.sentence_draw_create_room(boolean,integer,integer)','execute'
+  ) then raise exception 'Flexible room RPC grant is missing'; end if;
+
+  if has_function_privilege(
+    'anon','public.trip_create_room(integer,integer,integer)','execute'
+  ) or has_function_privilege(
+    'anon','public.sentence_draw_create_room(boolean,integer,integer)','execute'
+  ) then raise exception 'Flexible room RPC is exposed to anon'; end if;
 end $$;
 
 -- Only aggregate public state from this mode may be in the Realtime publication.
@@ -34,20 +50,52 @@ begin
 end $$;
 
 -- These result sets must stay empty. They can also audit rooms after live tests.
+select r.id as room_id,count(p.id) as joined_count,r.player_limit
+from public.trip_rooms r
+left join public.trip_players p on p.room_id=r.id
+group by r.id,r.player_limit
+having count(p.id) > r.player_limit;
+
+select p.room_id,p.id as player_id,count(a.id) as assignment_count,
+  r.missions_per_player
+from public.trip_players p
+join public.trip_rooms r on r.id=p.room_id
+left join public.trip_assignments a on a.player_id=p.id
+group by p.room_id,p.id,r.missions_per_player
+having count(a.id) <> r.missions_per_player;
+
+select p.room_id,p.id as player_id,p.car_number,p.seat_number
+from public.trip_players p
+join public.trip_rooms r on r.id=p.room_id
+where p.car_number > r.team_count
+  or p.seat_number > (r.player_limit/r.team_count) +
+    case when p.car_number <= mod(r.player_limit,r.team_count) then 1 else 0 end;
+
 select session_id,submission_id,count(*) as draw_count
 from public.sentence_draw_round_items
 group by session_id,submission_id
 having count(*) > 1;
 
-select session_id,round_id,count(*) as item_count
-from public.sentence_draw_round_items
-group by session_id,round_id
-having count(*) <> 3;
+select i.session_id,i.round_id,count(*) as item_count,
+  least(s.draw_size,
+    (select count(*) from public.sentence_draw_submissions x where x.session_id=s.id)
+      -((r.round_number-1)*s.draw_size)
+  ) as expected_item_count
+from public.sentence_draw_round_items i
+join public.sentence_draw_rounds r on r.id=i.round_id
+join public.sentence_draw_sessions s on s.id=i.session_id
+group by i.session_id,i.round_id,s.id,s.draw_size,s.player_limit,
+  s.sentences_per_player,r.round_number
+having count(*) <> least(s.draw_size,
+  (select count(*) from public.sentence_draw_submissions x where x.session_id=s.id)
+    -((r.round_number-1)*s.draw_size));
 
 select s.id as session_id,s.status,s.current_round,
   count(distinct r.id) as round_count,
   count(i.id) as revealed_count,
-  48-count(i.id) as calculated_remaining,
+  case when s.status='lobby' then s.player_limit*s.sentences_per_player
+    else (select count(*) from public.sentence_draw_submissions x where x.session_id=s.id)
+  end-count(i.id) as calculated_remaining,
   ps.remaining_count as stored_remaining
 from public.sentence_draw_sessions s
 join public.sentence_draw_public_state ps on ps.session_id=s.id
@@ -55,7 +103,8 @@ left join public.sentence_draw_rounds r on r.session_id=s.id
 left join public.sentence_draw_round_items i on i.round_id=r.id
 group by s.id,s.status,s.current_round,ps.remaining_count
 having count(distinct r.id) <> s.current_round
-  or count(i.id) <> s.current_round*3
-  or 48-count(i.id) <> ps.remaining_count;
+  or (case when s.status='lobby' then s.player_limit*s.sentences_per_player
+    else (select count(*) from public.sentence_draw_submissions x where x.session_id=s.id)
+  end)-count(i.id) <> ps.remaining_count;
 
 select 'Secret Sentence Draw security and integrity checks passed' as result;

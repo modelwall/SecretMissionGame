@@ -13,6 +13,10 @@ const baseRoom = (overrides = {}) => ({
   joined_count: 1,
   submitted_count: 0,
   current_round: 0,
+  player_limit: 16,
+  sentences_per_player: 3,
+  draw_size: 3,
+  total_count: 48,
   remaining_count: 48,
   my_sentences: [],
   current_sentences: [],
@@ -141,4 +145,83 @@ test('HTML from sentence text is escaped in private and revealed views', async (
   const html = fixture.controller.view();
   assert.doesNotMatch(html, /<script>alert/);
   assert.match(html, /&lt;script&gt;alert/);
+});
+
+test('room UI follows host-selected player and sentence counts', async () => {
+  installBrowserStubs();
+  const room = baseRoom({
+    player_limit: 5,
+    sentences_per_player: 2,
+    total_count: 10,
+    joined_count: 3,
+    submitted_count: 2,
+    remaining_count: 10,
+  });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  const html = fixture.controller.view();
+  assert.equal(fixture.controller.state.playerLimit, 5);
+  assert.equal(fixture.controller.state.sentencesPerPlayer, 2);
+  assert.equal(fixture.controller.state.mySentences.length, 2);
+  assert.match(html, /เขียน 2 ประโยคของคุณ/);
+  assert.match(html, /3<small>\/5<\/small>/);
+  assert.match(html, /4<small>\/10<\/small>/);
+});
+
+test('host-selected settings are sent to the create-room RPC', async () => {
+  installBrowserStubs();
+  const originalFormData = globalThis.FormData;
+  globalThis.FormData = class {
+    constructor(form) { this.values = form.values; }
+    get(name) { return this.values[name] ?? null; }
+    has(name) { return Boolean(this.values[name]); }
+  };
+  try {
+    const fixture = makeController((name, args) => {
+      assert.equal(name, 'sentence_draw_create_room');
+      assert.deepEqual(args, {
+        p_host_contributes: false,
+        p_player_limit: 5,
+        p_sentences_per_player: 2,
+      });
+      return { data: baseRoom({ player_limit: 5, sentences_per_player: 2, total_count: 10, remaining_count: 10, is_host: true, has_player: false }), error: null };
+    });
+
+    await fixture.controller.handleSubmit({
+      id: 'sentence-create-form',
+      values: { player_limit: '5', sentences_per_player: '2' },
+    });
+    assert.equal(fixture.controller.state.playerLimit, 5);
+  } finally {
+    globalThis.FormData = originalFormData;
+  }
+});
+
+test('host can start early when at least two joined players have all submitted', async () => {
+  installBrowserStubs();
+  const room = baseRoom({
+    is_host: true,
+    player_limit: 16,
+    sentences_per_player: 2,
+    total_count: 32,
+    joined_count: 2,
+    submitted_count: 2,
+    remaining_count: 32,
+    has_submitted: true,
+  });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  const html = fixture.controller.view();
+  assert.match(html, /4 ประโยค พร้อมเปิดรอบแรก/);
+  const drawButton = html.match(/<button[^>]*data-action="sentence-draw"[^>]*>/)?.[0] || '';
+  assert.doesNotMatch(drawButton, /disabled/);
+  assert.match(html, /รอเพิ่มอีกสูงสุด 14 คน/);
 });
