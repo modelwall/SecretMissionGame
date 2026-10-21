@@ -83,6 +83,65 @@ test('new visitor joins by code after the private status RPC rejects non-members
   assert.equal(localStorage.getItem('sentence_draw_room_code'), 'A1B2C3D4');
 });
 
+test('the same browser reuses its room membership token when auth membership is missing', async () => {
+  installBrowserStubs();
+  const room = baseRoom();
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status') return { data: null, error: new Error('DRAW_NOT_MEMBER') };
+    if (name === 'sentence_draw_join_room') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  fixture.controller.leave();
+  await fixture.controller.enter('A1B2C3D4');
+
+  const tokens = fixture.calls
+    .filter((call) => call.name === 'sentence_draw_join_room')
+    .map((call) => call.args.p_member_token);
+  assert.equal(tokens.length, 2);
+  assert.match(tokens[0], /^[0-9a-f]{64}$/);
+  assert.equal(tokens[1], tokens[0]);
+});
+
+test('a realtime refresh preserves unsaved sentence drafts', async () => {
+  installBrowserStubs();
+  let statusCalls = 0;
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status') {
+      statusCalls += 1;
+      return { data: baseRoom({ joined_count: statusCalls }), error: null };
+    }
+    if (name === 'sentence_draw_join_room') return { data: baseRoom({ joined_count: statusCalls }), error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+  await fixture.controller.enter('A1B2C3D4');
+
+  const fields = ['ประโยคที่กำลังพิมพ์', 'ยังไม่ส่ง', 'ห้ามหาย'].map((value, index) => ({
+    value,
+    dataset: { sentenceInput: String(index) },
+  }));
+  const counters = fields.map(() => ({ textContent: '' }));
+  const submit = { disabled: false };
+  const form = {
+    querySelectorAll: () => fields,
+    querySelector(selector) {
+      if (selector === '[data-sentence-submit]') return submit;
+      const index = Number(selector.match(/"(\d+)"/)?.[1]);
+      return counters[index];
+    },
+  };
+  fields[0].matches = () => true;
+  fields[0].closest = () => form;
+
+  fixture.controller.handleInput(fields[0]);
+  await fixture.controller.refresh();
+
+  assert.deepEqual(fixture.controller.state.mySentences, fields.map((field) => field.value));
+  assert.equal(fixture.controller.state.joinedCount, 2);
+  assert.match(localStorage.getItem('sentence_draw_draft:A1B2C3D4:1'), /ห้ามหาย/);
+});
+
 test('host draw sends the persisted expected round and renders the shared three-card result', async () => {
   installBrowserStubs();
   const lobby = baseRoom({
@@ -109,6 +168,7 @@ test('host draw sends the persisted expected round and renders the shared three-
       statusCalls += 1;
       return { data: lobby, error: null };
     }
+    if (name === 'sentence_draw_join_room') return { data: lobby, error: null };
     if (name === 'sentence_draw_draw') {
       assert.equal(args.p_expected_round, 0);
       assert.equal(args.p_code, 'A1B2C3D4');
@@ -138,6 +198,7 @@ test('HTML from sentence text is escaped in private and revealed views', async (
   });
   const fixture = makeController((name) => {
     if (name === 'sentence_draw_room_status') return { data: room, error: null };
+    if (name === 'sentence_draw_join_room') return { data: room, error: null };
     throw new Error(`Unexpected RPC: ${name}`);
   });
 
@@ -159,6 +220,7 @@ test('room UI follows host-selected player and sentence counts', async () => {
   });
   const fixture = makeController((name) => {
     if (name === 'sentence_draw_room_status') return { data: room, error: null };
+    if (name === 'sentence_draw_join_room') return { data: room, error: null };
     throw new Error(`Unexpected RPC: ${name}`);
   });
 
@@ -215,6 +277,7 @@ test('host can start early when at least two joined players have all submitted',
   });
   const fixture = makeController((name) => {
     if (name === 'sentence_draw_room_status') return { data: room, error: null };
+    if (name === 'sentence_draw_join_room') return { data: room, error: null };
     throw new Error(`Unexpected RPC: ${name}`);
   });
 

@@ -23,6 +23,7 @@ export function createSentenceDraw({
     totalCount: 48,
     remainingCount: 48,
     mySentences: emptySentences(3),
+    draftDirty: false,
     currentSentences: [],
     history: [],
     live: 'connecting',
@@ -32,6 +33,56 @@ export function createSentenceDraw({
   let refreshTimer = null;
   let refreshing = false;
   let refreshQueued = false;
+  const volatileMemberTokens = new Map();
+
+  const storageGet = (key) => {
+    try { return localStorage.getItem(key); } catch { return null; }
+  };
+  const storageSet = (key, value) => {
+    try { localStorage.setItem(key, value); } catch { /* Keep working without persistent storage. */ }
+  };
+  const storageRemove = (key) => {
+    try { localStorage.removeItem(key); } catch { /* Keep working without persistent storage. */ }
+  };
+  const memberTokenKey = (code) => `sentence_draw_member_token:${code}`;
+  const draftKey = (code, generation) => `sentence_draw_draft:${code}:${generation}`;
+
+  const createMemberToken = () => {
+    const bytes = new Uint8Array(32);
+    if (!globalThis.crypto?.getRandomValues) throw new Error('SECURE_STORAGE_UNAVAILABLE');
+    globalThis.crypto.getRandomValues(bytes);
+    return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  };
+
+  const memberTokenFor = (code) => {
+    const key = memberTokenKey(code);
+    const stored = storageGet(key) || volatileMemberTokens.get(code);
+    if (/^[0-9a-f]{64}$/.test(stored || '')) return stored;
+    const token = createMemberToken();
+    volatileMemberTokens.set(code, token);
+    storageSet(key, token);
+    return token;
+  };
+
+  const readDraft = (code, generation, count) => {
+    try {
+      const parsed = JSON.parse(storageGet(draftKey(code, generation)) || 'null');
+      if (!Array.isArray(parsed) || parsed.length !== count) return null;
+      return parsed.map((value) => String(value).slice(0, 200));
+    } catch { return null; }
+  };
+
+  const writeDraft = () => {
+    if (!state.roomCode || state.status !== 'lobby' || !state.hasPlayer) return;
+    storageSet(draftKey(state.roomCode, state.generation), JSON.stringify(state.mySentences));
+  };
+
+  const clearDraft = (code = state.roomCode, generation = state.generation) => {
+    if (code) storageRemove(draftKey(code, generation));
+  };
+
+  const isEditingDraft = () => typeof document !== 'undefined'
+    && document.activeElement?.matches?.('[data-sentence-input]');
 
   const normalizedSentences = (items, count) => {
     const result = emptySentences(count);
@@ -42,7 +93,11 @@ export function createSentenceDraw({
     return result;
   };
 
-  const applyRoom = (room) => {
+  const applyRoom = (room, { preserveDraft = true } = {}) => {
+    const previousCode = state.roomCode;
+    const previousGeneration = state.generation;
+    const previousDraft = state.mySentences;
+    const previousDirty = state.draftDirty;
     state.roomCode = room.code;
     state.roomId = room.id;
     state.status = room.status;
@@ -58,7 +113,23 @@ export function createSentenceDraw({
     state.drawSize = Number(room.draw_size || 3);
     state.totalCount = Number(room.total_count || (state.playerLimit * state.sentencesPerPlayer));
     state.remainingCount = Number(room.remaining_count ?? state.totalCount);
-    state.mySentences = normalizedSentences(room.my_sentences, state.sentencesPerPlayer);
+    const serverSentences = normalizedSentences(room.my_sentences, state.sentencesPerPlayer);
+    const sameDraft = previousCode === state.roomCode && previousGeneration === state.generation;
+    const cachedDraft = preserveDraft && state.status === 'lobby' && state.hasPlayer
+      ? readDraft(state.roomCode, state.generation, state.sentencesPerPlayer)
+      : null;
+    if (preserveDraft && sameDraft && previousDirty && state.status === 'lobby' && state.hasPlayer) {
+      state.mySentences = previousDraft.slice(0, state.sentencesPerPlayer);
+      while (state.mySentences.length < state.sentencesPerPlayer) state.mySentences.push('');
+      state.draftDirty = true;
+    } else if (cachedDraft) {
+      state.mySentences = cachedDraft;
+      state.draftDirty = cachedDraft.some((value, index) => value !== serverSentences[index]);
+    } else {
+      state.mySentences = serverSentences;
+      state.draftDirty = false;
+    }
+    if (state.status !== 'lobby') clearDraft();
     state.currentSentences = room.current_sentences || [];
     state.history = room.history || [];
   };
@@ -105,7 +176,7 @@ export function createSentenceDraw({
       if (error) throw error;
       if (state.roomCode !== code) return;
       applyRoom(data);
-      onRender();
+      if (!isEditingDraft()) onRender();
     } catch (error) {
       console.warn('Sentence Draw refresh failed:', error);
       state.live = 'connecting';
@@ -137,7 +208,7 @@ export function createSentenceDraw({
         const next = status === 'SUBSCRIBED' ? 'connected' : 'connecting';
         if (state.live !== next) {
           state.live = next;
-          onRender();
+          if (!isEditingDraft()) onRender();
         }
         if (status === 'SUBSCRIBED') scheduleRefresh();
       });
@@ -155,10 +226,23 @@ export function createSentenceDraw({
     if (normalized.length !== 8) throw new Error('รหัสห้องต้องเป็นตัวเลขหรือ A–F จำนวน 8 ตัว');
 
     let response = await db.rpc('sentence_draw_room_status', { p_code: normalized });
+    let joinedWithToken = false;
     if (response.error?.message?.includes('DRAW_NOT_MEMBER')) {
-      response = await db.rpc('sentence_draw_join_room', { p_code: normalized });
+      response = await db.rpc('sentence_draw_join_room', {
+        p_code: normalized,
+        p_member_token: memberTokenFor(normalized),
+      });
+      joinedWithToken = true;
     }
     if (response.error) throw response.error;
+    if (response.data.has_player && !joinedWithToken
+      && !/^[0-9a-f]{64}$/.test(storageGet(memberTokenKey(normalized)) || '')) {
+      response = await db.rpc('sentence_draw_join_room', {
+        p_code: normalized,
+        p_member_token: memberTokenFor(normalized),
+      });
+      if (response.error) throw response.error;
+    }
     openRoom(response.data);
   };
 
@@ -169,7 +253,16 @@ export function createSentenceDraw({
       p_sentences_per_player: sentencesPerPlayer,
     });
     if (error) throw error;
-    openRoom(data);
+    let room = data;
+    if (room.has_player) {
+      const attached = await db.rpc('sentence_draw_join_room', {
+        p_code: room.code,
+        p_member_token: memberTokenFor(room.code),
+      });
+      if (attached.error) throw attached.error;
+      room = attached.data;
+    }
+    openRoom(room);
   };
 
   const leave = () => {
@@ -180,6 +273,7 @@ export function createSentenceDraw({
     state.currentSentences = [];
     state.history = [];
     state.mySentences = emptySentences(state.sentencesPerPlayer);
+    state.draftDirty = false;
     localStorage.removeItem('sentence_draw_room_code');
   };
 
@@ -331,9 +425,14 @@ export function createSentenceDraw({
     if (action === 'sentence-reset-cancel') { state.confirmReset = false; onRender(); }
     if (action === 'sentence-join-player') {
       await runBusy(async () => {
-        const { data, error } = await db.rpc('sentence_draw_join_room', { p_code: state.roomCode });
+        const { data, error } = await db.rpc('sentence_draw_join_room', {
+          p_code: state.roomCode,
+          p_member_token: memberTokenFor(state.roomCode),
+        });
         if (error) throw error;
-        applyRoom(data);
+        applyRoom(data, { preserveDraft: false });
+        state.draftDirty = false;
+        clearDraft();
         toast(`เข้าร่วมเป็นผู้เล่นแล้ว ส่ง ${state.sentencesPerPlayer} ประโยคได้เลย`);
       });
     }
@@ -385,7 +484,9 @@ export function createSentenceDraw({
           p_code: state.roomCode, p_sentences: sentences,
         });
         if (error) throw error;
-        applyRoom(data);
+        applyRoom(data, { preserveDraft: false });
+        state.draftDirty = false;
+        clearDraft();
         toast(`บันทึก ${state.sentencesPerPlayer} ประโยคแล้ว ข้อความยังเป็นส่วนตัว`);
       });
     }
@@ -396,6 +497,9 @@ export function createSentenceDraw({
     if (!target.matches('[data-sentence-input]')) return false;
     const form = target.closest('form');
     const fields = [...form.querySelectorAll('[data-sentence-input]')];
+    state.mySentences = fields.map((field) => field.value);
+    state.draftDirty = true;
+    writeDraft();
     fields.forEach((field) => {
       const count = [...field.value].length;
       form.querySelector(`[data-count-for="${field.dataset.sentenceInput}"]`).textContent = `${count}/200`;

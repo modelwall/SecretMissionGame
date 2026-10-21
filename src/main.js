@@ -58,6 +58,7 @@ const errorMessage = (err) => {
   if (text.includes('DRAW_NOT_READY')) return 'ต้องมีผู้เล่นอย่างน้อย 2 คน และทุกคนที่เข้าห้องต้องส่งประโยคให้ครบก่อนเริ่ม';
   if (text.includes('DRAW_FINISHED')) return 'สุ่มครบทุกประโยคแล้ว';
   if (text.includes('INVALID_SENTENCES')) return 'จำนวนประโยคไม่ครบ หรือมีประโยคยาวเกิน 200 ตัวอักษร';
+  if (text.includes('INVALID_MEMBER_TOKEN') || text.includes('SECURE_STORAGE_UNAVAILABLE')) return 'เบราว์เซอร์นี้ไม่สามารถบันทึก session ของผู้เล่นได้ กรุณาเปิดใช้งานพื้นที่จัดเก็บของเว็บไซต์';
   if (text.includes('DRAW_NOT_MEMBER')) return 'คุณยังไม่ได้เข้าร่วมห้องสุ่มประโยคนี้';
   if (text.includes('Anonymous sign-ins are disabled')) return 'ยังไม่ได้เปิด Anonymous Sign-Ins ใน Supabase';
   if (text.includes('Could not find the function')) return 'ฐานข้อมูลยังไม่พร้อม กรุณารัน migration ล่าสุดใน Supabase';
@@ -149,7 +150,7 @@ function setupView() {
   return `${header('SETUP REQUIRED')}
     <main class="container setup-area"><div class="card-paper setup-card"><span class="giant-emoji">🛠️</span><h1>อีกนิดเดียวก็เล่นได้!</h1>
     <p>เว็บพร้อมแล้ว แต่ต้องเชื่อมกับ Supabase ก่อนจึงจะเล่นแบบ Multiplayer ได้</p>
-    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>supabase/schema.sql</code>, <code>sentence_draw_migration.sql</code> และ <code>flexible_room_settings_migration.sql</code> ใน SQL Editor</li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
+    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>schema.sql</code> → <code>sentence_draw_migration.sql</code> → <code>flexible_room_settings_migration.sql</code> → <code>sentence_draw_session_fix_migration.sql</code></li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
     <div class="mini-code">VITE_SUPABASE_URL<br>VITE_SUPABASE_ANON_KEY</div>
     <p class="small-note">ดูขั้นตอนละเอียดในไฟล์ README.md ที่มาพร้อมโปรเจกต์</p></div></main>`;
 }

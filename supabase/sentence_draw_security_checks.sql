@@ -1,5 +1,6 @@
 -- Multiplayer games | read-only security and data-integrity audit
--- Run after sentence_draw_migration.sql and flexible_room_settings_migration.sql.
+-- Run after sentence_draw_migration.sql, flexible_room_settings_migration.sql,
+-- and sentence_draw_session_fix_migration.sql.
 
 -- Private tables must not be directly readable by browser roles.
 do $$
@@ -24,13 +25,37 @@ begin
     'authenticated','public.trip_create_room(integer,integer,integer)','execute'
   ) or not has_function_privilege(
     'authenticated','public.sentence_draw_create_room(boolean,integer,integer)','execute'
+  ) or not has_function_privilege(
+    'authenticated','public.sentence_draw_join_room(text,text)','execute'
   ) then raise exception 'Flexible room RPC grant is missing'; end if;
 
   if has_function_privilege(
     'anon','public.trip_create_room(integer,integer,integer)','execute'
   ) or has_function_privilege(
     'anon','public.sentence_draw_create_room(boolean,integer,integer)','execute'
+  ) or has_function_privilege(
+    'anon','public.sentence_draw_join_room(text,text)','execute'
   ) then raise exception 'Flexible room RPC is exposed to anon'; end if;
+end $$;
+
+-- Recovery tokens are hashed, scoped to one room, and unique inside that room.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='sentence_draw_players'
+      and column_name='member_token_hash'
+  ) then raise exception 'Sentence Draw member-token column is missing'; end if;
+
+  if to_regclass('public.sentence_draw_players_session_member_token_idx') is null then
+    raise exception 'Sentence Draw member-token unique index is missing';
+  end if;
+
+  if exists (
+    select 1 from public.sentence_draw_players
+    where member_token_hash is not null
+      and member_token_hash !~ '^[0-9a-f]{64}$'
+  ) then raise exception 'Invalid Sentence Draw member-token hash found'; end if;
 end $$;
 
 -- Only aggregate public state from this mode may be in the Realtime publication.
