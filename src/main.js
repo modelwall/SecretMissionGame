@@ -8,12 +8,12 @@ const isConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.inclu
 const db = isConfigured ? createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
 }) : null;
-const CARD_STICKERS = ['🍓', '🍋', '🍇'];
+const CARD_STICKERS = ['🎮', '🧩', '🎯'];
 const CARS = [
-  { n: 1, color: 'pink', label: 'Peachy Ride', emoji: '🍑' },
-  { n: 2, color: 'purple', label: 'Grape Gang', emoji: '🍇' },
-  { n: 3, color: 'green', label: 'Kiwi Crew', emoji: '🥝' },
-  { n: 4, color: 'orange', label: 'Sunny Squad', emoji: '🍊' },
+  { n: 1, color: 'blue', label: 'Blue Cruiser', emoji: '🚙' },
+  { n: 2, color: 'yellow', label: 'Sunset Van', emoji: '🚐' },
+  { n: 3, color: 'green', label: 'Trail Crew', emoji: '🛻' },
+  { n: 4, color: 'orange', label: 'Road Runners', emoji: '🏎️' },
 ];
 const state = {
   screen: 'welcome', busy: false, user: null, roomCode: '', roomId: '',
@@ -60,22 +60,23 @@ const icon = (name, size=20) => {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.sparkle}</svg>`;
 };
 
-const heroCar = () => `<svg class="hero-car-art" viewBox="0 0 340 210" role="img" aria-label="รถเดินทางสีพาสเทลและผลไม้ตัวการ์ตูน" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="174" cy="189" rx="138" ry="15" fill="#E9DCCF" opacity=".65"/>
-  <path d="M72 113c5-31 27-48 56-49h87c21 0 37 19 48 49l22 8c12 4 19 12 19 24v25c0 9-7 15-16 15H58c-9 0-16-7-16-16v-20c0-16 11-28 30-36z" fill="#FFA69E" stroke="#41404C" stroke-width="4"/>
-  <path d="M108 74h108c15 0 25 18 33 41H88c4-22 11-41 20-41z" fill="#DFEDFF" stroke="#41404C" stroke-width="4"/>
-  <path d="M167 74v41" stroke="#41404C" stroke-width="4"/>
-  <circle cx="113" cy="117" r="23" fill="#F5C6DA"/><path d="M102 101c-2-12 11-17 16-7 12-3 17 9 9 18" fill="#52AA79"/>
-  <circle cx="216" cy="113" r="23" fill="#F2D962"/><path d="M206 96c4-11 12-9 14-3 9-5 16 5 8 11" fill="#7CBC83"/>
-  <circle cx="108" cy="118" r="2.6" fill="#474052"/><circle cx="120" cy="118" r="2.6" fill="#474052"/><path d="M111 126q4 5 8 0" stroke="#474052" stroke-width="2" fill="none"/>
-  <circle cx="211" cy="114" r="2.5" fill="#474052"/><circle cx="223" cy="114" r="2.5" fill="#474052"/><path d="M214 123q4 5 8 0" stroke="#474052" stroke-width="2" fill="none"/>
-  <rect x="50" y="147" width="32" height="11" rx="5" fill="#FFF2C7" stroke="#41404C" stroke-width="3"/><rect x="263" y="147" width="32" height="11" rx="5" fill="#FFF2C7" stroke="#41404C" stroke-width="3"/>
-  <circle cx="99" cy="182" r="25" fill="#41404C"/><circle cx="99" cy="182" r="13" fill="#F9FBFF"/><circle cx="247" cy="182" r="25" fill="#41404C"/><circle cx="247" cy="182" r="13" fill="#F9FBFF"/>
-  <path d="m29 78 6 5-6 5-6-5zM298 45l6 6-6 6-6-6zM277 24l4 4-4 4-4-4z" fill="#E9B668"/>
-  <path d="M298 100l8-8m-2 15 12-3M56 60l-8-7" stroke="#68B99E" stroke-width="4" stroke-linecap="round"/>
+const heroCar = () => `<svg class="hero-car-art" viewBox="0 0 360 225" role="img" aria-label="กลุ่มเพื่อนออกทริปด้วยรถสีฟ้า" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="181" cy="202" rx="145" ry="14" fill="#16324A" opacity=".12"/>
+  <path d="M84 116c7-34 30-53 62-54h89c23 0 42 22 53 54l22 8c12 4 19 13 19 25v24c0 10-7 16-17 16H61c-10 0-17-7-17-17v-21c0-16 13-29 40-35z" fill="#55B8D7" stroke="#16324A" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M122 72h111c16 0 28 19 37 46H99c5-25 13-46 23-46z" fill="#DDF4F8" stroke="#16324A" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M181 72v46" stroke="#16324A" stroke-width="5"/>
+  <circle cx="142" cy="93" r="17" fill="#F3B881"/><path d="M126 90c1-15 8-23 18-23 10 0 17 7 18 20-9-6-20-6-36 3z" fill="#263F53"/>
+  <circle cx="219" cy="92" r="17" fill="#C88962"/><path d="M202 90c2-16 10-23 20-21 8 1 14 8 14 19-10-5-21-5-34 2z" fill="#5A3D30"/>
+  <circle cx="137" cy="94" r="2.2" fill="#16324A"/><circle cx="148" cy="94" r="2.2" fill="#16324A"/><path d="M139 102q4 4 8 0" stroke="#16324A" stroke-width="2" fill="none"/>
+  <circle cx="214" cy="93" r="2.2" fill="#16324A"/><circle cx="225" cy="93" r="2.2" fill="#16324A"/><path d="M216 101q4 4 8 0" stroke="#16324A" stroke-width="2" fill="none"/>
+  <rect x="157" y="139" width="58" height="25" rx="8" fill="#F6C84E" stroke="#16324A" stroke-width="4"/><path d="m174 146 0 11 10-5.5z" fill="#16324A"/><circle cx="197" cy="151" r="4" fill="#16324A"/>
+  <rect x="51" y="150" width="34" height="12" rx="5" fill="#F6C84E" stroke="#16324A" stroke-width="3"/><rect x="286" y="150" width="34" height="12" rx="5" fill="#F6C84E" stroke="#16324A" stroke-width="3"/>
+  <circle cx="105" cy="187" r="27" fill="#16324A"/><circle cx="105" cy="187" r="13" fill="#F4F6F8"/><circle cx="270" cy="187" r="27" fill="#16324A"/><circle cx="270" cy="187" r="13" fill="#F4F6F8"/>
+  <path d="M39 80h24M51 68v24M310 66l10-10m-4 18 17-3" stroke="#F26B4A" stroke-width="5" stroke-linecap="round"/>
+  <path d="M298 25v48" stroke="#16324A" stroke-width="4"/><path d="M299 26h34l-9 10 9 10h-34z" fill="#F26B4A" stroke="#16324A" stroke-width="3" stroke-linejoin="round"/>
 </svg>`;
 const header = (title = 'Road Trip Club', back = false) => `<header class="topbar container">
-  <button class="logo-button" data-action="home" aria-label="หน้าหลัก"><span class="logo-mark">✳</span><span class="brand">SECRET<span>MISSION</span></span></button>
+  <button class="logo-button" data-action="home" aria-label="หน้าหลัก"><span class="logo-mark">🎮</span><span class="brand">SECRET<span>MISSION</span></span></button>
   ${back ? `<button class="text-button muted" data-action="home">${icon('back',16)} หน้าแรก</button>` : `<span class="topbar-badge">✦ ${safe(title)}</span>`}
 </header>`;
 const wave = () => `<div class="blob-decoration b1"></div><div class="blob-decoration b2"></div>`;
@@ -88,15 +89,15 @@ function welcomeView() {
   return `${header('PLAY TOGETHER')}
   <main class="container welcome-main">
     <section class="welcome-hero">
-      <div class="float-sticker sticker-star">✳</div><div class="float-sticker sticker-peach">🍑</div>
+      <div class="float-sticker sticker-star">🏁</div><div class="float-sticker sticker-crew">🧑‍🤝‍🧑</div>
       <div class="hero-illustration">${heroCar()}</div>
-      <span class="mini-kicker">✿ LET'S MAKE MEMORIES ✿</span>
+      <span class="mini-kicker">READY · SET · ROAD TRIP</span>
       <h1>Secret <span>Mission!</span></h1>
-      <p>เกมลับ ๆ บนรถ ที่ทำให้เพื่อนหลุดขำ<br>และสนิทกันมากขึ้นโดยไม่รู้ตัว 💘</p>
-      <div class="stats-strip"><span>🚙 <b>4</b> Cars</span><span>👯 <b>16</b> Players</span><span>💌 <b>3</b> Cards/Person</span></div>
+      <p>เกมภารกิจลับบนรถ ชวนเพื่อนทำเรื่องฮา ๆ<br>แล้วลุ้นไปด้วยกันตลอดทริป</p>
+      <div class="stats-strip"><span>🚙 <b>4</b> Cars</span><span>🧑‍🤝‍🧑 <b>16</b> Players</span><span>🎮 <b>3</b> Missions</span></div>
     </section>
     <section class="welcome-actions">
-      <div class="actions-heading"><span>🍒</span><div><h2>พร้อมออกทริปกันยัง?</h2><p>สร้างห้องใหม่ หรือใส่โค้ดห้องของเพื่อน</p></div></div>
+      <div class="actions-heading"><span>🚦</span><div><h2>พร้อมออกทริปกันยัง?</h2><p>สร้างห้องใหม่ หรือใส่โค้ดห้องของเพื่อน</p></div></div>
       ${state.busy ? loadingBtn('กำลังเชื่อมต่อ...') : button(`สร้างห้องใหม่ ${icon('arrow',20)}`,'create','primary big')}
       <div class="or-line"><span>หรือเข้าร่วมกับเพื่อน</span></div>
       <form id="join-room-form" class="code-form">
@@ -105,7 +106,7 @@ function welcomeView() {
         <button class="btn navy" type="submit" ${state.busy ? 'disabled' : ''}>เข้าห้อง ${icon('arrow',18)}</button></div>
       </form>
     </section>
-    <div class="footer-note">☁️ เล่นจากมือถือใครมือถือมัน · คะแนนอัปเดตให้ทั้งกลุ่ม</div>
+    <div class="footer-note">📱 เล่นจากมือถือใครมือถือมัน · คะแนนอัปเดตให้ทั้งกลุ่ม</div>
   </main>`;
 }
 function setupView() {
@@ -137,7 +138,7 @@ function seatsView() {
         return `<button class="seat-option ${isTaken?'taken':''} ${state.selectedSeat===i?'selected':''}" data-action="select-seat" data-seat="${i}" ${isTaken?'disabled':''}>
           <span class="seat-number">${isTaken?'🔒':'⭐'}</span><b>Player ${i}</b><small>${isTaken?'มีเจ้าของแล้ว':state.selectedSeat===i?'เลือกแล้ว ✓':'ว่าง · แตะเพื่อเลือก'}</small></button>`;
       }).join('')}</div>
-      ${state.selectedSeat && !occupied.has(`${state.selectedCar}-${state.selectedSeat}`) ? `<form id="join-seat-form" class="join-name-form"><label for="nickname">ชื่อเล่นของเธอ ✨</label>
+      ${state.selectedSeat && !occupied.has(`${state.selectedCar}-${state.selectedSeat}`) ? `<form id="join-seat-form" class="join-name-form"><label for="nickname">ชื่อเล่นของคุณ</label>
         <input id="nickname" name="nickname" type="text" maxlength="24" minlength="2" placeholder="เช่น เอิ้ก, อ้อ, เบ้บ" required autocomplete="nickname" />
         <button class="btn primary big" type="submit" ${state.busy?'disabled':''}>${state.busy?'กำลังรับภารกิจ...':'รับการ์ดภารกิจ 3 ใบ'} ${icon('arrow',19)}</button></form>`:
         `<div class="seat-hint">👆 เลือก Player ที่ยังว่างเพื่อรับภารกิจลับของตัวเอง</div>`}
@@ -151,7 +152,7 @@ function missionCard(a, i) {
     <div class="mission-card-top"><span>MISSION ${String(a.card_number).padStart(2,'0')}</span><span class="mission-card-status">${isDone?'✓ COMPLETED':isOpen?'TOP SECRET':'✦ SECRET CARD'}</span></div>
     ${!isOpen ? `<button class="card-cover" data-action="flip" data-id="${a.id}" aria-label="เปิดการ์ดภารกิจ ${a.card_number}">
       <span class="card-art">${CARD_STICKERS[i%3]}</span><span class="card-sparkle">✧ ✦ ✧</span>
-      <span class="reveal-label">${icon('lock',16)} แตะเพื่อเปิดโจทย์ลับ</span><small>เพื่อนคนอื่นยังมองไม่เห็นนะ ♡</small>
+      <span class="reveal-label">${icon('lock',16)} แตะเพื่อเปิดโจทย์ลับ</span><small>การ์ดใบนี้เห็นได้เฉพาะคุณ</small>
       </button>` : `<div class="card-content"><span class="card-art small">${CARD_STICKERS[i%3]}</span><p>${safe(a.mission_text)}</p>
       ${isDone ? `<div class="card-done-line">${icon('tick',16)} เปิดเผยโจทย์ให้เพื่อนทั้งห้องแล้ว</div>` : `<div class="card-actions">
         <button data-action="flip" data-id="${a.id}" class="text-button">${icon('lock',14)} ซ่อนการ์ด</button>
@@ -172,10 +173,10 @@ function missionFeed() {
   const finished=state.assignments.filter(a=>a.completed_at)
     .map(a=>({...a,who:state.players.find(p=>p.id===a.player_id)}))
     .sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at));
-  return `<section class="feed-section"><div class="head-row"><div><span class="eyebrow-text">REVEALED TO EVERYONE</span><h2>ภารกิจที่โป๊ะแตก 💌</h2></div><span class="feed-count">${finished.length} สำเร็จ</span></div>
+  return `<section class="feed-section"><div class="head-row"><div><span class="eyebrow-text">REVEALED TO EVERYONE</span><h2>ภารกิจที่โป๊ะแตก 🎯</h2></div><span class="feed-count">${finished.length} สำเร็จ</span></div>
    ${finished.length ? `<div class="feed-list">${finished.map((a,i)=>`<div class="feed-item"><span class="feed-sticker">${CARD_STICKERS[i%3]}</span>
        <div class="feed-detail"><div class="feed-meta"><strong>${safe(a.who?.nickname||'Player')}</strong><span>Car ${a.who?.car_number??'?' } · Player ${a.who?.seat_number??'?'}</span></div>
-       <p>${safe(a.mission_text)}</p><small>${new Date(a.completed_at).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</small></div><span class="feed-check">${icon('tick',15)}</span></div>`).join('')}</div>` : `<div class="empty-feed"><span>🍭</span><h3>ยังไม่มีคนเปิดเผยภารกิจ</h3><p>พอมีใครกด “ทำสำเร็จแล้ว” โจทย์นั้นจะปรากฏตรงนี้ให้เพื่อนทุกคนเห็นทันที</p></div>`}
+       <p>${safe(a.mission_text)}</p><small>${new Date(a.completed_at).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</small></div><span class="feed-check">${icon('tick',15)}</span></div>`).join('')}</div>` : `<div class="empty-feed"><span>🕹️</span><h3>ยังไม่มีคนเปิดเผยภารกิจ</h3><p>พอมีใครกด “ทำสำเร็จแล้ว” โจทย์นั้นจะปรากฏตรงนี้ให้เพื่อนทุกคนเห็นทันที</p></div>`}
   </section>`;
 }
 function roster() {
@@ -208,14 +209,14 @@ function gameView() {
          <p>Car ${state.player?.car_number} · Player ${state.player?.seat_number} <span class="little-divider">✳</span> ${done}/3 missions done</p></div>
          <div class="avatar-bubble">🕵️</div></div>
       <div class="room-banner"><div><small>YOUR TRIP ROOM</small><strong>${safe(state.roomCode)}</strong></div><button data-action="share" class="light-pill">${icon('copy',16)} เชิญเพื่อน</button></div>
-      <div class="tabbar" role="tablist"><button role="tab" class="${state.tab==='cards'?'active':''}" data-action="tab" data-tab="cards">💌 การ์ดของฉัน <span>${done}/3</span></button>
+      <div class="tabbar" role="tablist"><button role="tab" class="${state.tab==='cards'?'active':''}" data-action="tab" data-tab="cards">🎮 การ์ดของฉัน <span>${done}/3</span></button>
         <button role="tab" class="${state.tab==='board'?'active':''}" data-action="tab" data-tab="board">🏆 Live Board <span>${state.assignments.filter(x=>x.completed_at).length}</span></button></div>
       ${state.tab === 'cards' ? `<div class="my-missions-header">${stepLabel('✦','TOP SECRET · FOR YOUR EYES ONLY')}<h2>ภารกิจของเธอ <span>3 ใบ</span></h2><p>ภารกิจที่ยังไม่สำเร็จเป็นความลับของเธอคนเดียว พอสำเร็จ เพื่อนทุกคนจะเห็นโจทย์ใน Live Board!</p></div>
          <div class="mission-stack">${mine.length===3 ? mine.map(missionCard).join('') : `<div class="empty-feed"><span>📦</span><p>กำลังเตรียมการ์ดของคุณ ลองโหลดหน้าใหม่อีกครั้ง</p></div>`}</div>
          <div class="progress-summary"><div><span>YOUR PROGRESS</span><strong>${done} / 3 completed</strong></div>
             <div class="progress-track"><span style="width:${done/3*100}%"></span></div></div>
          <button class="btn outline board-cta" data-action="tab" data-tab="board">ดูภารกิจที่เพื่อนทำสำเร็จ ${icon('arrow',18)}</button>` : `${scoreboard()}${missionFeed()}${roster()}`}
-      <div class="game-bottom"><span>🍓</span> KEEP IT FUN, KEEP IT SECRET <span>🍊</span><p>คนขับตั้งใจขับรถนะ ให้ผู้โดยสารเป็นคนเล่น 💗</p>
+      <div class="game-bottom"><span>🚗</span> KEEP IT FUN, KEEP IT SECRET <span>🏁</span><p>คนขับตั้งใจขับรถนะ ให้ผู้โดยสารเป็นคนเล่น</p>
         <button class="subtle-link" data-action="home">เปลี่ยนห้อง / กลับหน้าแรก</button></div>
     </main>${confirmation()}`;
 }
@@ -337,7 +338,7 @@ function subscribeToRoom() {
 }
 async function shareInvite() {
   const url=new URL(location.href);url.searchParams.set('room',state.roomCode);
-  const message=`เข้ามาเล่น Secret Mission กัน! 🚗💌\nรหัสห้อง ${state.roomCode}\n${url.toString()}`;
+  const message=`เข้ามาเล่น Secret Mission กัน! 🚗🎮\nรหัสห้อง ${state.roomCode}\n${url.toString()}`;
   if(navigator.share) {
     try {await navigator.share({title:'Secret Mission Road Trip',text:`มาเล่นเกมกัน! รหัส ${state.roomCode}`,url:url.toString()});return;}
     catch(e){if(e?.name==='AbortError')return;}
@@ -398,7 +399,7 @@ $app.addEventListener('submit',async(e)=>{
       });
       if(error){if(error.message?.includes('SEAT_TAKEN'))await refreshSeats();throw error;}
       state.tab='cards';await loadRoom(state.roomCode);
-      toast('ยินดีต้อนรับ! รับภารกิจลับ 3 ใบแล้ว 💌');
+      toast('ยินดีต้อนรับ! รับภารกิจลับ 3 ใบแล้ว 🎮');
     });
   }
 });
