@@ -42,7 +42,9 @@ const state = {
   screen: 'welcome', mode: 'missions', busy: false, user: null, roomCode: '', roomId: '',
   seats: [], selectedCar: 1, selectedSeat: null, player: null, nickname: '',
   players: [], assignments: [], tab: 'cards',
-  playerLimit: 16, teamCount: 4, missionsPerPlayer: 3,
+  playerLimit: 16, teamCount: 4, missionsPerPlayer: 3, teamNames: [],
+  draftPlayerLimit: '16', draftTeamCount: '4', draftMissionsPerPlayer: '3',
+  draftTeamNames: Array(8).fill(''),
   live: 'connecting', flipped: new Set(), confirming: null, confirmingReroll: null, latestReveal: null, error: '',
 };
 let liveChannel = null;
@@ -59,6 +61,13 @@ const totalDone = (car) => state.assignments.filter(a => a.completed_at &&
   state.players.find(p => p.id === a.player_id)?.car_number === car).length;
 const activeCars = () => CARS.slice(0, state.teamCount);
 const teamCapacity = (car) => capacityForTeam(state.playerLimit,state.teamCount,car);
+const carName = (n) => state.teamNames[Number(n)-1]?.trim() || `Car ${n}`;
+const carDisplay = (n) => carName(n) === `Car ${n}` ? `Car ${n}` : `Car ${n} · ${carName(n)}`;
+const draftTeamNameInputs = (count) => Array.from({length:count},(_,i)=>`
+  <label class="team-name-field"><span>Car ${i+1}</span>
+    <input name="team_name_${i+1}" type="text" maxlength="24"
+      autocomplete="off" placeholder="เช่น รถเอิ้ก" value="${safe(state.draftTeamNames[i]||'')}" />
+  </label>`).join('');
 const errorMessage = (err) => {
   const text = (err?.message || String(err || '')).trim();
   if (text.includes('ROOM_NOT_FOUND')) return 'ไม่พบห้องนี้ ลองตรวจรหัสห้องอีกครั้ง';
@@ -72,6 +81,7 @@ const errorMessage = (err) => {
   if (text.includes('NOT_ENOUGH_MISSIONS')) return 'ภารกิจในระบบไม่เพียงพอ กรุณาติดต่อผู้ดูแล';
   if (text.includes('DRAW_ROOM_NOT_FOUND')) return 'ไม่พบห้องสุ่มประโยคนี้ ลองตรวจรหัสอีกครั้ง';
   if (text.includes('ROOM_FULL') || text.includes('DRAW_ROOM_FULL')) return 'ห้องนี้มีผู้เล่นครบตามจำนวนที่โฮสต์ตั้งไว้แล้ว';
+  if (text.includes('INVALID_TEAM_NAMES')) return 'ชื่อรถต้องไม่ซ้ำกัน และมีความยาวไม่เกิน 24 ตัวอักษร';
   if (text.includes('INVALID_ROOM_SETTINGS')) return 'ค่าห้องไม่ถูกต้อง กรุณาตรวจจำนวนผู้เล่น ทีม และโจทย์อีกครั้ง';
   if (text.includes('INVALID_DRAW_SETTINGS')) return 'ค่าห้องไม่ถูกต้อง กรุณาตรวจจำนวนผู้เล่น ประโยคต่อคน และจำนวนที่เปิดต่อรอบอีกครั้ง';
   if (text.includes('DRAW_ROOM_STARTED') || text.includes('DRAW_SUBMISSIONS_LOCKED')) return 'เกมเริ่มแล้ว ไม่สามารถเข้าห้องหรือแก้ประโยคได้';
@@ -153,11 +163,15 @@ function welcomeView() {
       <form id="mission-create-form" class="room-settings-form">
         <div class="settings-heading"><b>ตั้งค่าห้องของคุณ</b><small>ปรับได้ก่อนสร้างห้อง</small></div>
         <div class="settings-grid">
-          <label><span>ผู้เล่นทั้งหมด</span><input name="player_limit" type="number" min="2" max="24" value="16" required></label>
-          <label><span>จำนวนรถ / ทีม</span><input name="team_count" type="number" min="1" max="8" value="4" required></label>
-          <label><span>โจทย์ต่อคน</span><input name="missions_per_player" type="number" min="1" max="6" value="3" required></label>
+          <label><span>ผู้เล่นทั้งหมด</span><input name="player_limit" type="number" min="2" max="24" value="${safe(state.draftPlayerLimit)}" required></label>
+          <label><span>จำนวนรถ / ทีม</span><input name="team_count" type="number" min="1" max="8" value="${safe(state.draftTeamCount)}" required></label>
+          <label><span>โจทย์ต่อคน</span><input name="missions_per_player" type="number" min="1" max="6" value="${safe(state.draftMissionsPerPlayer)}" required></label>
         </div>
-        <p class="settings-note">ระบบจะแบ่งจำนวนที่นั่งให้แต่ละรถใกล้เคียงกัน และใช้โจทย์ไม่ซ้ำกันในห้อง</p>
+        <div class="team-names-panel">
+          <div class="settings-heading"><b>🚙 ตั้งชื่อรถแต่ละคัน</b><small>ปล่อยว่างเพื่อใช้ชื่อ Car 1, Car 2… ตามเดิม</small></div>
+          <div id="team-name-fields" class="team-name-grid">${draftTeamNameInputs(Math.min(8,Math.max(1,Number(state.draftTeamCount)||4)))}</div>
+        </div>
+        <p class="settings-note">ชื่อรถจะแสดงให้เพื่อนทุกคนเห็นตอนเลือกที่นั่งและดูคะแนน · โจทย์ไม่ซ้ำกันในห้อง</p>
         <button class="btn primary big" type="submit" ${state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสร้างห้อง...' : `สร้างห้องใหม่ ${icon('arrow',20)}`}</button>
       </form>
       <div class="or-line"><span>หรือเข้าร่วมกับเพื่อน</span></div>
@@ -200,10 +214,10 @@ function seatsView() {
       const used=state.seats.filter(x=>x.car===c.n).length;
       return `<button class="car-option theme-${c.color} ${state.selectedCar===c.n?'active':''}" data-action="select-car" data-car="${c.n}">
         <span class="car-option-top"><span>${c.emoji}</span><span class="seat-occupancy">${used}/${teamCapacity(c.n)} คน</span></span>
-        <span class="mini-car">🚙</span><b>Car ${c.n}</b><small>${c.label}</small>
+        <span class="mini-car">🚙</span><b>${safe(carName(c.n))}</b><small>Car ${c.n} · ${safe(c.label)}</small>
       </button>`;
     }).join('')}</div>
-    <div class="selection-panel"><div class="section-heading compact">${stepLabel('02',`CAR ${selected.n} · SELECT PLAYER`)}<h2>แล้วเธอเป็น Player ไหน?</h2><p>ช่องที่มีเพื่อนเลือกแล้วจะถูกล็อกไว้</p></div>
+    <div class="selection-panel"><div class="section-heading compact">${stepLabel('02',`CAR ${selected.n} · ${safe(carName(selected.n))} · SELECT PLAYER`)}<h2>แล้วเธอเป็น Player ไหน?</h2><p>ช่องที่มีเพื่อนเลือกแล้วจะถูกล็อกไว้</p></div>
       <div class="seats-grid">${Array.from({length:capacity},(_,index)=>index+1).map(i=>{
         const isTaken = occupied.has(`${state.selectedCar}-${i}`);
         return `<button class="seat-option ${isTaken?'taken':''} ${state.selectedSeat===i?'selected':''}" data-action="select-seat" data-seat="${i}" ${isTaken?'disabled':''}>
@@ -237,7 +251,7 @@ function scoreboard() {
    <div class="score-cars">${activeCars().map(c=>{
      const count = totalDone(c.n); const joined=state.players.filter(p=>p.car_number===c.n).length;
      const target=teamCapacity(c.n)*state.missionsPerPlayer;
-     return `<div class="score-car theme-${c.color}"><div class="score-car-top"><span>${c.emoji} CAR ${c.n}</span><strong>${count}<small>/${target}</small></strong></div>
+     return `<div class="score-car theme-${c.color}"><div class="score-car-top"><span>${c.emoji} ${safe(carDisplay(c.n))}</span><strong>${count}<small>/${target}</small></strong></div>
       <div class="progress-track"><span style="width:${target ? count/target*100 : 0}%"></span></div>
       <small>${joined} / ${teamCapacity(c.n)} Players joined</small></div>`;
    }).join('')}</div></section>`;
@@ -248,13 +262,13 @@ function missionFeed() {
     .sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at));
   return `<section class="feed-section"><div class="head-row"><div><span class="eyebrow-text">REVEALED TO EVERYONE</span><h2>ภารกิจที่โป๊ะแตก 🎯</h2></div><span class="feed-count">${finished.length} สำเร็จ</span></div>
    ${finished.length ? `<div class="feed-list">${finished.map((a,i)=>`<div class="feed-item"><span class="feed-sticker">${CARD_STICKERS[i%3]}</span>
-       <div class="feed-detail"><div class="feed-meta"><strong>${safe(a.who?.nickname||'Player')}</strong><span>Car ${a.who?.car_number??'?' } · Player ${a.who?.seat_number??'?'}</span></div>
+       <div class="feed-detail"><div class="feed-meta"><strong>${safe(a.who?.nickname||'Player')}</strong><span>${safe(carDisplay(a.who?.car_number??'?'))} · Player ${a.who?.seat_number??'?'}</span></div>
        <p>${safe(a.mission_text)}</p><small>${new Date(a.completed_at).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</small></div><span class="feed-check">${icon('tick',15)}</span></div>`).join('')}</div>` : `<div class="empty-feed"><span>🕹️</span><h3>ยังไม่มีคนเปิดเผยภารกิจ</h3><p>พอมีใครกด “ทำสำเร็จแล้ว” โจทย์นั้นจะปรากฏตรงนี้ให้เพื่อนทุกคนเห็นทันที</p></div>`}
   </section>`;
 }
 function roster() {
   return `<section class="roster-section"><div class="head-row"><div><span class="eyebrow-text">WHO'S ON BOARD?</span><h2>สมาชิกทั้ง ${state.teamCount} คัน 🚙</h2></div></div>
-    ${activeCars().map(c=>`<div class="roster-car"><h3>${c.emoji} Car ${c.n} <span>${state.players.filter(p=>p.car_number===c.n).length}/${teamCapacity(c.n)} คน</span></h3>
+    ${activeCars().map(c=>`<div class="roster-car"><h3>${c.emoji} ${safe(carDisplay(c.n))} <span>${state.players.filter(p=>p.car_number===c.n).length}/${teamCapacity(c.n)} คน</span></h3>
       <div class="roster-list">${Array.from({length:teamCapacity(c.n)},(_,index)=>index+1).map(seat=>{
          const p=state.players.find(x=>x.car_number===c.n&&x.seat_number===seat);
          return `<div class="roster-player"><span class="roster-avatar">${p?'🙂':'◌'}</span><span class="roster-name">${p?safe(p.nickname):`Player ${seat} · ยังว่าง`}</span>
@@ -291,7 +305,7 @@ function gameView() {
   return `${header('MULTIPLAYER LIVE')}
     <main class="container game-main">
       <div class="game-welcome"><div><span class="eyebrow-text">HELLO, SECRET AGENT ✌</span><h1>Hey, ${safe(state.player?.nickname || 'Player')}!</h1>
-         <p>Car ${state.player?.car_number} · Player ${state.player?.seat_number} <span class="little-divider">✳</span> ${done}/${state.missionsPerPlayer} missions done</p></div>
+         <p>${safe(carDisplay(state.player?.car_number))} · Player ${state.player?.seat_number} <span class="little-divider">✳</span> ${done}/${state.missionsPerPlayer} missions done</p></div>
          <div class="avatar-bubble">🕵️</div></div>
       <div class="room-banner"><div><small>YOUR TRIP ROOM</small><strong>${safe(state.roomCode)}</strong></div><button data-action="share" class="light-pill">${icon('copy',16)} เชิญเพื่อน</button></div>
       <div class="tabbar" role="tablist"><button role="tab" class="${state.tab==='cards'?'active':''}" data-action="tab" data-tab="cards">🎮 การ์ดของฉัน <span>${done}/${state.missionsPerPlayer}</span></button>
@@ -313,7 +327,7 @@ function revealNotice() {
   return `<aside class="reveal-toast" role="status" aria-live="polite" style="${elapsed<300?`animation-delay:-${elapsed}ms`:'animation:none'}">
     <div class="reveal-emoji">🎉</div>
     <div class="reveal-copy"><strong>มีคนเปิดเผยโจทย์ใหม่!</strong>
-      <small>${safe(a.who)} · Car ${a.car} ทำสำเร็จแล้ว</small>
+      <small>${safe(a.who)} · ${safe(carDisplay(a.car))} ทำสำเร็จแล้ว</small>
       <p>“${safe(a.text)}”</p>
       <button data-action="tab" data-tab="board">ไปดู Live Board →</button></div>
     <button class="reveal-close" aria-label="ปิดการแจ้งเตือน" data-action="dismiss-reveal">${icon('close',15)}</button>
@@ -355,6 +369,7 @@ async function loadRoom(code) {
   if(e1) throw e1;
   state.roomCode=room.code;state.roomId=room.id;state.seats=room.seats||[];
   state.playerLimit=Number(room.player_limit||16);state.teamCount=Number(room.team_count||4);
+  state.teamNames=Array.isArray(room.team_names) ? room.team_names : [];
   state.missionsPerPlayer=Number(room.missions_per_player||3);
   if(state.selectedCar>state.teamCount)state.selectedCar=1;
   const {data:me,error:e2}=await authed(()=>db.from('trip_players').select('*').eq('room_id',room.id).eq('user_id',state.user.id).maybeSingle());
@@ -372,6 +387,7 @@ async function refreshSeats() {
   if(error) throw error;
   state.seats=data.seats||[];
   state.playerLimit=Number(data.player_limit||state.playerLimit);state.teamCount=Number(data.team_count||state.teamCount);
+  state.teamNames=Array.isArray(data.team_names) ? data.team_names : [];
   state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);render();
 }
 async function refreshData() {
@@ -447,7 +463,7 @@ async function shareInvite() {
 function backHome() {
   const wasSentence=state.screen==='sentence'||state.mode==='sentences';
   stopSubscription();sentenceDraw.leave();state.screen='welcome';state.mode=wasSentence?'sentences':'missions';state.roomId='';state.roomCode='';state.player=null;
-  state.players=[];state.assignments=[];state.confirming=null;state.confirmingReroll=null;state.latestReveal=null;state.flipped.clear();
+  state.players=[];state.assignments=[];state.teamNames=[];state.confirming=null;state.confirmingReroll=null;state.latestReveal=null;state.flipped.clear();
   removeLocal('trip_room_code');
   history.replaceState(null,'',state.mode==='sentences'?`${location.pathname}?mode=sentences`:location.pathname);
   render();
@@ -517,8 +533,15 @@ $app.addEventListener('submit',async(e)=>{
     if(!isValidMissionSettings(playerLimit,teamCount,missionsPerPlayer)){
       toast('ตั้งค่าได้สูงสุด 24 คน, 8 ทีม, 6 โจทย์ต่อคน และรวมไม่เกิน 72 โจทย์',true);return;
     }
+    const teamNames=Array.from({length:teamCount},(_,i)=>String(formData.get(`team_name_${i+1}`)||'').trim()||`Car ${i+1}`);
+    if(new Set(teamNames.map(name=>name.toLocaleLowerCase())).size!==teamCount){
+      toast('ชื่อรถห้ามซ้ำกัน กรุณาตั้งชื่อแต่ละคันให้ต่างกัน',true);return;
+    }
     await withBusy(async()=>{
-      const {data,error}=await rpc('trip_create_room',{p_player_limit:playerLimit,p_team_count:teamCount,p_missions_per_player:missionsPerPlayer});if(error)throw error;
+      const {data,error}=await rpc('trip_create_named_room',{
+        p_player_limit:playerLimit,p_team_count:teamCount,
+        p_missions_per_player:missionsPerPlayer,p_team_names:teamNames,
+      });if(error)throw error;
       await loadRoom(data.code);
       toast('สร้างห้องแล้ว! แชร์โค้ดให้เพื่อนได้เลย 🎈');
     });return;
@@ -540,6 +563,21 @@ $app.addEventListener('submit',async(e)=>{
   }
 });
 $app.addEventListener('input',(e)=>{
+  if(e.target.closest('#mission-create-form')){
+    if(e.target.name==='player_limit')state.draftPlayerLimit=e.target.value;
+    if(e.target.name==='missions_per_player')state.draftMissionsPerPlayer=e.target.value;
+    if(e.target.name==='team_count'){
+      state.draftTeamCount=e.target.value;
+      const count=Number(e.target.value);
+      if(Number.isInteger(count) && count>=1 && count<=8){
+        const fields=document.querySelector('#team-name-fields');
+        if(fields)fields.innerHTML=draftTeamNameInputs(count);
+      }
+    }
+    const match=e.target.name?.match(/^team_name_([1-8])$/);
+    if(match)state.draftTeamNames[Number(match[1])-1]=e.target.value;
+    return;
+  }
   if(e.target.id==='nickname'){state.nickname=e.target.value;return;}
   sentenceDraw.handleInput(e.target);
 });
@@ -571,7 +609,9 @@ async function init() {
       rpc('trip_room_status',{p_code:state.roomCode}).then(({data})=>{
         if(data && state.screen==='seats' && JSON.stringify(data.seats)!==JSON.stringify(state.seats)){
           state.seats=data.seats;state.playerLimit=Number(data.player_limit||state.playerLimit);
-          state.teamCount=Number(data.team_count||state.teamCount);state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);
+          state.teamCount=Number(data.team_count||state.teamCount);
+           state.teamNames=Array.isArray(data.team_names) ? data.team_names : [];
+           state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);
           // Re-rendering mid-typing would close the phone keyboard; join-seat still rechecks the seat.
           if(document.activeElement?.id!=='nickname') render();
         }
