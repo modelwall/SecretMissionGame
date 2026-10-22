@@ -5,7 +5,7 @@
 โปรเจกต์มี 2 game modes ที่แยก state และข้อมูลออกจากกัน:
 
 - **Secret Mission Cards** — โฮสต์ตั้งผู้เล่น 2–24 คน, รถ/ทีม 1–8 คัน และโจทย์ 1–6 ใบต่อคน (รวมไม่เกิน 72 ใบ)
-- **สุ่มประโยคลับ / Secret Sentence Draw** — โฮสต์ตั้งความจุสูงสุด 2–24 คนและประโยค 1–6 ข้อต่อคน เริ่มก่อนได้เมื่อมีอย่างน้อย 2 คนและทุกคนที่เข้ามาส่งครบ จากนั้นเปิดสูงสุดทีละ 3 แบบไม่ซ้ำ
+- **สุ่มประโยคลับ / Secret Sentence Draw** — โฮสต์ตั้งความจุสูงสุด 2–24 คน, ประโยค 1–6 ข้อต่อคน และจำนวนประโยคที่เปิดต่อรอบ (1 ถึงจำนวนประโยคทั้งหมดของห้อง) เริ่มได้ทันทีเมื่อมีคนส่งประโยคแล้วอย่างน้อย 1 คน (ประโยคของคนที่ยังไม่ส่งตอนเริ่มจะไม่ถูกนำมาสุ่ม) จากนั้นเปิดทีละรอบแบบไม่ซ้ำ
 
 คู่มือติดตั้ง ความปลอดภัย และ acceptance tests ของโหมดใหม่อยู่ที่ [`SECRET_SENTENCE_DRAW.md`](./SECRET_SENTENCE_DRAW.md)
 
@@ -38,7 +38,9 @@
 
 1. [`supabase/sentence_draw_migration.sql`](./supabase/sentence_draw_migration.sql)
 2. [`supabase/flexible_room_settings_migration.sql`](./supabase/flexible_room_settings_migration.sql) เพื่อเพิ่มค่าห้องแบบยืดหยุ่นให้ทั้งสองเกม (ห้องเดิมยังใช้ค่า 16/4/3)
-3. [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) เพื่อตรวจ grants, Realtime exposure และ no-repeat invariants
+3. [`supabase/sentence_draw_session_fix_migration.sql`](./supabase/sentence_draw_session_fix_migration.sql) เพื่อให้ผู้เล่นกลับเข้าห้องเดิมได้แม้ anonymous session เปลี่ยน
+4. [`supabase/sentence_draw_flexible_draw_migration.sql`](./supabase/sentence_draw_flexible_draw_migration.sql) เพื่อให้โฮสต์ตั้งจำนวนประโยคที่เปิดต่อรอบได้ และเริ่มได้แม้ยังมีคนส่งไม่ครบ
+5. [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) เพื่อตรวจ grants, Realtime exposure และ no-repeat invariants
 
 **สำคัญ:** ควรใช้ Supabase Project ใหม่สำหรับเว็บนี้โดยเฉพาะ อย่าใช้ฐานข้อมูลสำคัญที่มีผู้ใช้จริงมาทดลอง SQL โดยไม่สำรองข้อมูล
 
@@ -127,7 +129,7 @@ Vercel จะติดตั้ง Dependencies, รัน `npm run build` แ�
 |---|---|
 | หน้าเว็บขึ้น Setup Required | เพิ่ม Environment Variables แล้ว Redeploy |
 | Anonymous sign-ins disabled | ไปเปิด Allow anonymous sign-ins ใน Supabase Auth |
-| Could not find function | รัน SQL migrations ทั้ง 3 ไฟล์ตามลำดับให้ครบ |
+| Could not find function | รัน SQL migrations ทุกไฟล์ตามลำดับให้ครบ |
 | เข้าได้ แต่ไม่เห็นคะแนนสด | SQL ต้องเพิ่ม `trip_assignments`, `trip_players` ใน `supabase_realtime`; หน้าเว็บจะ fallback โหลดทุก 15 วินาที |
 | 2 คนเลือก Player เดียวกัน | คนที่กดทีหลังจะได้รับข้อความที่นั่งถูกเลือกแล้ว ให้เลือกช่องอื่น |
 | เปลี่ยนมือถือแล้วการ์ดเดิมหาย | เป็นข้อจำกัดของ Anonymous Auth (session ผูกกับเบราว์เซอร์เดิม) |
@@ -147,6 +149,8 @@ roadtrip-secret-mission-multiplayer/
 │   ├── schema.sql             # Secret Mission database / RLS / RPC / seed missions
 │   ├── sentence_draw_migration.sql       # Additive migration for Sentence Draw
 │   ├── flexible_room_settings_migration.sql # Flexible host settings for both modes
+│   ├── sentence_draw_session_fix_migration.sql # Sentence Draw membership recovery
+│   ├── sentence_draw_flexible_draw_migration.sql # Host-selected draw size and early start
 │   └── sentence_draw_security_checks.sql # Read-only security/integrity audit
 ├── SECRET_SENTENCE_DRAW.md    # Setup, deployment, and acceptance tests
 ├── .env.example               # ตัวอย่างค่าที่ต้องใส่

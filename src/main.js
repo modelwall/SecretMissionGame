@@ -51,11 +51,12 @@ const errorMessage = (err) => {
   if (text.includes('NOT_ENOUGH_MISSIONS')) return 'ภารกิจในระบบไม่เพียงพอ กรุณาติดต่อผู้ดูแล';
   if (text.includes('DRAW_ROOM_NOT_FOUND')) return 'ไม่พบห้องสุ่มประโยคนี้ ลองตรวจรหัสอีกครั้ง';
   if (text.includes('ROOM_FULL') || text.includes('DRAW_ROOM_FULL')) return 'ห้องนี้มีผู้เล่นครบตามจำนวนที่โฮสต์ตั้งไว้แล้ว';
-  if (text.includes('INVALID_ROOM_SETTINGS') || text.includes('INVALID_DRAW_SETTINGS')) return 'ค่าห้องไม่ถูกต้อง กรุณาตรวจจำนวนผู้เล่น ทีม และโจทย์อีกครั้ง';
+  if (text.includes('INVALID_ROOM_SETTINGS')) return 'ค่าห้องไม่ถูกต้อง กรุณาตรวจจำนวนผู้เล่น ทีม และโจทย์อีกครั้ง';
+  if (text.includes('INVALID_DRAW_SETTINGS')) return 'ค่าห้องไม่ถูกต้อง กรุณาตรวจจำนวนผู้เล่น ประโยคต่อคน และจำนวนที่เปิดต่อรอบอีกครั้ง';
   if (text.includes('DRAW_ROOM_STARTED') || text.includes('DRAW_SUBMISSIONS_LOCKED')) return 'เกมเริ่มแล้ว ไม่สามารถเข้าห้องหรือแก้ประโยคได้';
   if (text.includes('DRAW_NOT_PLAYER')) return 'โฮสต์ต้องเข้าร่วมเป็นผู้เล่นก่อนจึงจะส่งประโยคได้';
   if (text.includes('DRAW_NOT_HOST')) return 'เฉพาะโฮสต์ของห้องเท่านั้นที่สั่งสุ่มหรือรีเซ็ตได้';
-  if (text.includes('DRAW_NOT_READY')) return 'ต้องมีผู้เล่นอย่างน้อย 2 คน และทุกคนที่เข้าห้องต้องส่งประโยคให้ครบก่อนเริ่ม';
+  if (text.includes('DRAW_NOT_READY')) return 'ต้องมีผู้เล่นส่งประโยคแล้วอย่างน้อย 1 คนก่อนเริ่ม';
   if (text.includes('DRAW_FINISHED')) return 'สุ่มครบทุกประโยคแล้ว';
   if (text.includes('INVALID_SENTENCES')) return 'จำนวนประโยคไม่ครบ หรือมีประโยคยาวเกิน 200 ตัวอักษร';
   if (text.includes('INVALID_MEMBER_TOKEN') || text.includes('SECURE_STORAGE_UNAVAILABLE')) return 'เบราว์เซอร์นี้ไม่สามารถบันทึก session ของผู้เล่นได้ กรุณาเปิดใช้งานพื้นที่จัดเก็บของเว็บไซต์';

@@ -23,8 +23,10 @@
 2. เปิด **Supabase Dashboard → SQL Editor → New query**
 3. รัน [`supabase/sentence_draw_migration.sql`](./supabase/sentence_draw_migration.sql)
 4. รัน [`supabase/flexible_room_settings_migration.sql`](./supabase/flexible_room_settings_migration.sql)
-5. รัน [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) ผลลัพธ์สุดท้ายควรเป็น `Secret Sentence Draw security and integrity checks passed` และ result sets ก่อนหน้าต้องว่าง
-5. ไม่ต้องเพิ่ม environment variable ใหม่ ใช้ `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` เดิม ห้ามนำ service-role/secret key เข้า Vercel หรือ frontend
+5. รัน [`supabase/sentence_draw_session_fix_migration.sql`](./supabase/sentence_draw_session_fix_migration.sql)
+6. รัน [`supabase/sentence_draw_flexible_draw_migration.sql`](./supabase/sentence_draw_flexible_draw_migration.sql) เพื่อเปิดให้ตั้งจำนวนประโยคต่อรอบได้ (1 ถึงผู้เล่น × ประโยคต่อคน) และเริ่มได้เมื่อมีคนส่งแล้วอย่างน้อย 1 คน
+7. รัน [`supabase/sentence_draw_security_checks.sql`](./supabase/sentence_draw_security_checks.sql) ผลลัพธ์สุดท้ายควรเป็น `Secret Sentence Draw security and integrity checks passed` และ result sets ก่อนหน้าต้องว่าง
+8. ไม่ต้องเพิ่ม environment variable ใหม่ ใช้ `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` เดิม ห้ามนำ service-role/secret key เข้า Vercel หรือ frontend
 
 Migration นี้เป็น additive migration: สร้างเฉพาะ object ชื่อ `sentence_draw_*` และไม่แก้หรือลบ `trip_rooms`, `trip_players`, `trip_mission_bank` หรือ `trip_assignments`
 
@@ -60,17 +62,18 @@ npm run dev
 
 ### 2. Permission and premature start
 
-1. เมื่อมีผู้เล่นน้อยกว่า 2 คน หรือยังมีผู้เล่นที่ส่งไม่ครบ ปุ่มเริ่มต้อง disabled
+1. เมื่อยังไม่มีใครส่งประโยคเลย ปุ่มเริ่มต้อง disabled
 2. เรียก `sentence_draw_draw` ด้วย token ของผู้เล่นทั่วไป ต้องได้ `DRAW_NOT_HOST`
-3. เรียกด้วย host ขณะที่มีผู้เล่นน้อยกว่า 2 คนหรือมีคนส่งไม่ครบ ต้องได้ `DRAW_NOT_READY`; ถ้ามีอย่างน้อย 2 คนและทุกคนส่งครบต้องเริ่มได้แม้ห้องยังไม่เต็ม
-4. หลังเริ่ม ลอง join identity ใหม่หรือแก้ submission ต้องได้ `DRAW_ROOM_STARTED` / `DRAW_SUBMISSIONS_LOCKED`
+3. เรียกด้วย host ขณะที่ยังไม่มีใครส่ง ต้องได้ `DRAW_NOT_READY`; เมื่อมีคนส่งแล้วอย่างน้อย 1 คนต้องเริ่มได้ แม้ห้องยังไม่เต็มหรือยังมีคนที่ยังไม่ส่ง โฮสต์ต้องเห็นคำเตือนจำนวนคนที่ยังไม่ส่ง และผู้เล่นที่ยังไม่ส่งต้องเห็นคำเตือนว่าโฮสต์เริ่มได้ทุกเมื่อ
+4. หลังเริ่ม ลอง join identity ใหม่หรือแก้/ส่ง submission ต้องได้ `DRAW_ROOM_STARTED` / `DRAW_SUBMISSIONS_LOCKED` และประโยคของคนที่ยังไม่ส่งตอนเริ่มต้องไม่อยู่ใน pool
+5. สร้างห้องด้วยจำนวนเปิดต่อรอบมากกว่า 3 (เช่น 5) แล้วยืนยันว่าแต่ละรอบเปิด 5 ประโยค ยกเว้นรอบสุดท้ายที่เหลือน้อยกว่า; ค่ามากกว่าผู้เล่น × ประโยคต่อคนต้องได้ `INVALID_DRAW_SETTINGS`
 
 ### 3. Concurrency and no-repeat
 
 1. เปิดห้อง host เดียวกันสองแท็บ โดยให้ทั้งสองเห็นรอบเดียวกัน
 2. กดสุ่มใกล้กันทั้งสองแท็บ ผลต้องเดินหน้าเพียงหนึ่งรอบ เพราะทั้งสองส่ง `p_expected_round` ค่าเดิม
 3. สุ่มต่อจน remaining เป็น `0` แล้วรัน `sentence_draw_security_checks.sql`
-4. จำนวน round items ต้องเท่ากับ `จำนวนผู้เล่นตอนเริ่ม × sentences_per_player`, submission IDs ต้องไม่ซ้ำ และ query ตรวจ duplicate ต้องไม่คืนแถว
+4. จำนวน round items ต้องเท่ากับ `จำนวนผู้เล่นที่ส่งแล้วตอนเริ่ม × sentences_per_player`, submission IDs ต้องไม่ซ้ำ และ query ตรวจ duplicate ต้องไม่คืนแถว
 5. เรียกสุ่มอีกครั้งต้องได้ `DRAW_FINISHED`
 
 ### 4. Reconnect and room isolation

@@ -6,7 +6,7 @@ export const ROOM_LIMITS = Object.freeze({
   minItemsPerPlayer: 1,
   maxItemsPerPlayer: 6,
   missionBankSize: 72,
-  drawSize: 3,
+  minDrawSize: 1,
 });
 
 export function isValidMissionSettings(playerLimit, teamCount, missionsPerPlayer) {
@@ -16,9 +16,10 @@ export function isValidMissionSettings(playerLimit, teamCount, missionsPerPlayer
     playerLimit * missionsPerPlayer <= ROOM_LIMITS.missionBankSize;
 }
 
-export function isValidSentenceSettings(playerLimit, sentencesPerPlayer) {
+export function isValidSentenceSettings(playerLimit, sentencesPerPlayer, drawSize) {
   return Number.isInteger(playerLimit) && playerLimit >= ROOM_LIMITS.minPlayers && playerLimit <= ROOM_LIMITS.maxPlayers &&
-    Number.isInteger(sentencesPerPlayer) && sentencesPerPlayer >= ROOM_LIMITS.minItemsPerPlayer && sentencesPerPlayer <= ROOM_LIMITS.maxItemsPerPlayer;
+    Number.isInteger(sentencesPerPlayer) && sentencesPerPlayer >= ROOM_LIMITS.minItemsPerPlayer && sentencesPerPlayer <= ROOM_LIMITS.maxItemsPerPlayer &&
+    Number.isInteger(drawSize) && drawSize >= ROOM_LIMITS.minDrawSize && drawSize <= playerLimit * sentencesPerPlayer;
 }
 
 export function capacityForTeam(playerLimit, teamCount, teamNumber) {

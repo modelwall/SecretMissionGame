@@ -246,11 +246,12 @@ export function createSentenceDraw({
     openRoom(response.data);
   };
 
-  const create = async (hostContributes, playerLimit, sentencesPerPlayer) => {
+  const create = async (hostContributes, playerLimit, sentencesPerPlayer, drawSize) => {
     const { data, error } = await db.rpc('sentence_draw_create_room', {
       p_host_contributes: hostContributes,
       p_player_limit: playerLimit,
       p_sentences_per_player: sentencesPerPlayer,
+      p_draw_size: drawSize,
     });
     if (error) throw error;
     let room = data;
@@ -307,7 +308,7 @@ export function createSentenceDraw({
           <div class="sentence-intro-icon">💬</div>
           <span class="mini-kicker">FLEXIBLE PLAYERS · PRIVATE SENTENCES · NO REPEATS</span>
           <h1>สุ่มประโยค<span>ลับ</span></h1>
-          <p>โฮสต์กำหนดจำนวนคนและประโยคต่อคน<br>แล้วเปิดพร้อมกันสูงสุดรอบละ 3 ประโยคแบบไม่ซ้ำ</p>
+          <p>โฮสต์กำหนดจำนวนคน ประโยคต่อคน<br>และจำนวนประโยคที่เปิดพร้อมกันในแต่ละรอบแบบไม่ซ้ำ</p>
         </section>
         <section class="welcome-actions sentence-actions">
           <div class="actions-heading"><span>🎲</span><div><h2>สร้างห้องใหม่</h2><p>ผู้สร้างห้องจะเป็นโฮสต์และควบคุมการสุ่ม</p></div></div>
@@ -315,8 +316,9 @@ export function createSentenceDraw({
             <div class="settings-grid sentence-settings-grid">
               <label><span>ผู้เล่นสูงสุด</span><input name="player_limit" type="number" min="2" max="24" value="16" required></label>
               <label><span>ประโยคต่อคน</span><input name="sentences_per_player" type="number" min="1" max="6" value="3" required></label>
+              <label><span>เปิดต่อรอบ</span><input name="draw_size" type="number" min="1" max="144" value="3" required></label>
             </div>
-            <p class="settings-note">เริ่มก่อนได้เมื่อมีอย่างน้อย 2 คนและทุกคนส่งครบ · แต่ละรอบเปิดสูงสุด 3 ประโยค</p>
+            <p class="settings-note">เปิดต่อรอบได้ตั้งแต่ 1 ถึงจำนวนประโยคทั้งหมด (ผู้เล่น × ประโยคต่อคน) · เริ่มได้ทันทีเมื่อมีคนส่งประโยคแล้วอย่างน้อย 1 คน</p>
             <label class="host-choice"><input type="checkbox" name="host_contributes" checked><span><b>ฉันร่วมส่งประโยคด้วย</b><small>นับเป็น 1 คนจากจำนวนที่ตั้งไว้</small></span></label>
             <button class="btn primary big" type="submit" ${state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสร้างห้อง...' : `สร้างห้องสุ่มประโยค ${icon('arrow', 20)}`}</button>
           </form>
@@ -332,9 +334,9 @@ export function createSentenceDraw({
   };
 
   const progressView = () => {
-    const ready = state.joinedCount >= 2 && state.submittedCount === state.joinedCount;
+    const allSubmitted = state.submittedCount > 0 && state.submittedCount === state.joinedCount;
     return `<section class="sentence-progress card-paper">
-      <div class="head-row"><div><span class="eyebrow-text">LOBBY PROGRESS</span><h2>${ready ? 'พร้อมเริ่มสุ่มแล้ว!' : 'กำลังรอทุกคน'}</h2></div>
+      <div class="head-row"><div><span class="eyebrow-text">LOBBY PROGRESS</span><h2>${allSubmitted ? 'พร้อมเริ่มสุ่มแล้ว!' : 'กำลังรอทุกคน'}</h2></div>
         <span class="live-indicator ${state.live === 'connected' ? 'online' : ''}"><span></span>${state.live === 'connected' ? 'LIVE' : 'SYNCING'}</span></div>
       <div class="sentence-count-grid">
         <div><strong>${state.joinedCount}<small>/${state.playerLimit}</small></strong><span>ผู้เล่นเข้าห้อง</span></div>
@@ -365,17 +367,26 @@ export function createSentenceDraw({
   };
 
   const lobbyView = () => {
-    const ready = state.joinedCount >= 2 && state.submittedCount === state.joinedCount;
-    const waitingForSubmissions = state.joinedCount - state.submittedCount;
+    // Only complete submissions enter the pool, so the host may start as soon as one exists.
+    const readyCount = state.submittedCount * state.sentencesPerPlayer;
+    const ready = readyCount > 0;
+    const waitingForSubmissions = Math.max(state.joinedCount - state.submittedCount, 0);
     const availableSlots = state.playerLimit - state.joinedCount;
-    const readyCount = state.joinedCount * state.sentencesPerPlayer;
+    const hostNote = !ready
+      ? 'ต้องมีผู้เล่นส่งประโยคแล้วอย่างน้อย 1 คนจึงจะเริ่มได้'
+      : waitingForSubmissions
+        ? `เริ่มได้เลย แต่ยังมี ${waitingForSubmissions} คนที่ยังไม่ส่ง ประโยคของคนที่ยังไม่ส่งจะไม่ถูกนำมาสุ่ม · เมื่อเริ่มแล้วจะปิดรับผู้เล่นและแก้ไขไม่ได้`
+        : `เริ่มได้เลย${availableSlots ? ` หรือรอเพิ่มอีกสูงสุด ${availableSlots} คน` : ''} · เมื่อเริ่มแล้วจะปิดรับผู้เล่นและแก้ไขไม่ได้`;
+    const playerNote = state.hasSubmitted
+      ? '⏳ ส่งประโยคแล้วรอโฮสต์เริ่มเกม หน้านี้จะอัปเดตอัตโนมัติ'
+      : '⚠️ โฮสต์เริ่มเกมได้ทุกเมื่อ ถ้ายังไม่ส่งตอนเริ่ม ประโยคของคุณจะไม่ถูกนำมาสุ่ม';
     return `${progressView()}
       ${submissionView()}
       ${state.isHost ? `<section class="host-controls card-paper"><span class="host-badge">HOST CONTROL</span>
-        <h2>${ready ? `${readyCount} ประโยค พร้อมเปิดรอบแรก` : 'รอผู้เล่นและประโยคให้พร้อม'}</h2>
-        <p>${ready ? `เริ่มได้เลย${availableSlots ? ` หรือรอเพิ่มอีกสูงสุด ${availableSlots} คน` : ''} · เมื่อเริ่มแล้วจะปิดรับผู้เล่นและแก้ไขไม่ได้` : state.joinedCount < 2 ? `ต้องมีผู้เล่นอย่างน้อย 2 คน · ตอนนี้มี ${state.joinedCount} คน` : `ยังรออีก ${waitingForSubmissions} คนส่งประโยคให้ครบ`}</p>
-        <button class="btn primary big" data-action="sentence-draw" ${!ready || state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสุ่ม...' : `เริ่มสุ่ม ${Math.min(state.drawSize,readyCount)} ประโยค ${icon('shuffle', 20)}`}</button>
-      </section>` : '<div class="waiting-callout">⏳ ส่งประโยคแล้วรอโฮสต์เริ่มเกม หน้านี้จะอัปเดตอัตโนมัติ</div>'}`;
+        <h2>${ready ? `${readyCount} ประโยค พร้อมเปิดรอบแรก` : 'รอผู้เล่นส่งประโยค'}</h2>
+        <p>${hostNote}</p>
+        <button class="btn primary big" data-action="sentence-draw" ${!ready || state.busy ? 'disabled' : ''}>${state.busy ? '<span class="spinner"></span>กำลังสุ่ม...' : `เริ่มสุ่ม ${Math.min(state.drawSize,readyCount || state.drawSize)} ประโยค ${icon('shuffle', 20)}`}</button>
+      </section>` : `<div class="waiting-callout">${playerNote}</div>`}`;
   };
 
   const drawView = () => {
@@ -384,7 +395,7 @@ export function createSentenceDraw({
       <div class="draw-stage-head"><div><span class="eyebrow-text">SECRET SENTENCE DRAW</span><h1>${finished ? `ครบทั้ง ${state.totalCount} ประโยคแล้ว!` : `รอบที่ ${state.currentRound}`}</h1></div>
         <div class="remaining-pill"><strong>${state.remainingCount}</strong><span>เหลือ</span></div></div>
       <div class="sentence-reveal-grid">
-        ${state.currentSentences.map((item, index) => `<article class="sentence-reveal-card reveal-tone-${index}"><span>${String(index + 1).padStart(2, '0')}</span><p>${safe(item.text)}</p></article>`).join('')}
+        ${state.currentSentences.map((item, index) => `<article class="sentence-reveal-card reveal-tone-${index % 3}"><span>${String(index + 1).padStart(2, '0')}</span><p>${safe(item.text)}</p></article>`).join('')}
       </div>
       ${finished ? `<div class="finished-callout">🏁 สุ่มครบ ${state.currentRound} รอบแล้ว ทุกประโยคถูกเปิดเผยครั้งเดียว</div>` : ''}
       ${state.isHost ? `<section class="host-draw-controls">
@@ -463,11 +474,12 @@ export function createSentenceDraw({
       const data = new FormData(form);
       const playerLimit = Number(data.get('player_limit'));
       const sentencesPerPlayer = Number(data.get('sentences_per_player'));
-      if (!isValidSentenceSettings(playerLimit, sentencesPerPlayer)) {
-        toast('ตั้งค่าได้ 2–24 คน และ 1–6 ประโยคต่อคน', true);
+      const drawSize = Number(data.get('draw_size'));
+      if (!isValidSentenceSettings(playerLimit, sentencesPerPlayer, drawSize)) {
+        toast('ตั้งค่าได้ 2–24 คน, 1–6 ประโยคต่อคน และเปิดต่อรอบได้ไม่เกินจำนวนประโยคทั้งหมด (ผู้เล่น × ประโยคต่อคน)', true);
         return true;
       }
-      await runBusy(() => create(data.has('host_contributes'), playerLimit, sentencesPerPlayer));
+      await runBusy(() => create(data.has('host_contributes'), playerLimit, sentencesPerPlayer, drawSize));
     }
     if (form.id === 'sentence-join-form') {
       const code = new FormData(form).get('code');

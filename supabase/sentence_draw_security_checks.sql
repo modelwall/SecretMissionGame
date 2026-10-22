@@ -1,6 +1,6 @@
 -- Multiplayer games | read-only security and data-integrity audit
 -- Run after sentence_draw_migration.sql, flexible_room_settings_migration.sql,
--- and sentence_draw_session_fix_migration.sql.
+-- sentence_draw_session_fix_migration.sql and sentence_draw_flexible_draw_migration.sql.
 
 -- Private tables must not be directly readable by browser roles.
 do $$
@@ -26,6 +26,8 @@ begin
   ) or not has_function_privilege(
     'authenticated','public.sentence_draw_create_room(boolean,integer,integer)','execute'
   ) or not has_function_privilege(
+    'authenticated','public.sentence_draw_create_room(boolean,integer,integer,integer)','execute'
+  ) or not has_function_privilege(
     'authenticated','public.sentence_draw_join_room(text,text)','execute'
   ) then raise exception 'Flexible room RPC grant is missing'; end if;
 
@@ -33,6 +35,8 @@ begin
     'anon','public.trip_create_room(integer,integer,integer)','execute'
   ) or has_function_privilege(
     'anon','public.sentence_draw_create_room(boolean,integer,integer)','execute'
+  ) or has_function_privilege(
+    'anon','public.sentence_draw_create_room(boolean,integer,integer,integer)','execute'
   ) or has_function_privilege(
     'anon','public.sentence_draw_join_room(text,text)','execute'
   ) then raise exception 'Flexible room RPC is exposed to anon'; end if;

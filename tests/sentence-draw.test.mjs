@@ -249,18 +249,132 @@ test('host-selected settings are sent to the create-room RPC', async () => {
         p_host_contributes: false,
         p_player_limit: 5,
         p_sentences_per_player: 2,
+        p_draw_size: 10,
       });
-      return { data: baseRoom({ player_limit: 5, sentences_per_player: 2, total_count: 10, remaining_count: 10, is_host: true, has_player: false }), error: null };
+      return { data: baseRoom({ player_limit: 5, sentences_per_player: 2, draw_size: 10, total_count: 10, remaining_count: 10, is_host: true, has_player: false }), error: null };
     });
 
     await fixture.controller.handleSubmit({
       id: 'sentence-create-form',
-      values: { player_limit: '5', sentences_per_player: '2' },
+      values: { player_limit: '5', sentences_per_player: '2', draw_size: '10' },
     });
     assert.equal(fixture.controller.state.playerLimit, 5);
+    assert.equal(fixture.controller.state.drawSize, 10);
   } finally {
     globalThis.FormData = originalFormData;
   }
+});
+
+test('a draw size larger than the room total is rejected before calling the server', async () => {
+  installBrowserStubs();
+  const originalFormData = globalThis.FormData;
+  globalThis.FormData = class {
+    constructor(form) { this.values = form.values; }
+    get(name) { return this.values[name] ?? null; }
+    has(name) { return Boolean(this.values[name]); }
+  };
+  try {
+    const fixture = makeController((name) => { throw new Error(`Unexpected RPC: ${name}`); });
+    await fixture.controller.handleSubmit({
+      id: 'sentence-create-form',
+      values: { player_limit: '5', sentences_per_player: '2', draw_size: '11' },
+    });
+    assert.equal(fixture.calls.length, 0);
+  } finally {
+    globalThis.FormData = originalFormData;
+  }
+});
+
+test('room UI follows the host-selected draw size beyond three', async () => {
+  installBrowserStubs();
+  const room = baseRoom({
+    is_host: true,
+    draw_size: 5,
+    joined_count: 4,
+    submitted_count: 4,
+    has_submitted: true,
+  });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  const html = fixture.controller.view();
+  assert.equal(fixture.controller.state.drawSize, 5);
+  assert.match(html, /สูงสุด 5 ใบ\/รอบ/);
+  assert.match(html, /เริ่มสุ่ม 5 ประโยค/);
+});
+
+test('a round with more than three sentences renders every card with cycling tones', async () => {
+  installBrowserStubs();
+  const room = baseRoom({
+    is_host: true,
+    status: 'started',
+    draw_size: 5,
+    current_round: 1,
+    total_count: 12,
+    remaining_count: 7,
+    current_sentences: [1, 2, 3, 4, 5].map((position) => ({ id: `s${position}`, position, text: `ประโยคที่เปิด ${position}` })),
+  });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  const html = fixture.controller.view();
+  assert.equal(html.match(/class="sentence-reveal-card/g)?.length, 5);
+  assert.doesNotMatch(html, /reveal-tone-[3-9]/);
+  assert.match(html, /ประโยคที่เปิด 5/);
+  assert.match(html, /สุ่มต่ออีก 5 ประโยค/);
+});
+
+test('host can start while some joined players have not submitted yet', async () => {
+  installBrowserStubs();
+  const room = baseRoom({
+    is_host: true,
+    joined_count: 4,
+    submitted_count: 1,
+    has_submitted: true,
+  });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  const html = fixture.controller.view();
+  const drawButton = html.match(/<button[^>]*data-action="sentence-draw"[^>]*>/)?.[0] || '';
+  assert.doesNotMatch(drawButton, /disabled/);
+  assert.match(html, /3 ประโยค พร้อมเปิดรอบแรก/);
+  assert.match(html, /ยังมี 3 คนที่ยังไม่ส่ง/);
+});
+
+test('host cannot start before anyone has submitted', async () => {
+  installBrowserStubs();
+  const room = baseRoom({ is_host: true, joined_count: 3, submitted_count: 0 });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  const html = fixture.controller.view();
+  const drawButton = html.match(/<button[^>]*data-action="sentence-draw"[^>]*>/)?.[0] || '';
+  assert.match(drawButton, /disabled/);
+});
+
+test('players who have not submitted are warned that the host may start early', async () => {
+  installBrowserStubs();
+  const room = baseRoom({ joined_count: 3, submitted_count: 1 });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: room, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+
+  await fixture.controller.enter('A1B2C3D4');
+  assert.match(fixture.controller.view(), /โฮสต์เริ่มเกมได้ทุกเมื่อ/);
 });
 
 test('host can start early when at least two joined players have all submitted', async () => {

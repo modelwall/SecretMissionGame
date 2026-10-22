@@ -290,7 +290,7 @@ input:focus { border-color: var(--blue-dark); background: #fff; }
 .settings-note { margin: -3px 0 0; line-height: 1.6; }
 .room-config-summary { display: flex; flex-wrap: wrap; gap: 7px; margin: -5px 0 15px; }
 .room-config-summary span { border: 1px solid #ccdce2; border-radius: 100px; background: #fff; padding: 7px 10px; color: #536d7a; font-size: 9px; font-weight: 800; }
-.sentence-settings-grid { grid-template-columns: repeat(2,minmax(0,1fr)); margin-bottom: 4px; }
+.sentence-settings-grid { margin-bottom: 4px; }
 
 /* Secret Sentence Draw landing */
 .sentence-landing { padding-bottom: 35px; }
@@ -377,5 +377,4 @@ textarea:focus-visible { outline: 3px solid #f6c84e; outline-offset: 2px; }
 
 @media (max-width: 420px) {
   .settings-grid { grid-template-columns: 1fr; }
-  .sentence-settings-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }

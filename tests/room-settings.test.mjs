@@ -19,7 +19,15 @@ test('mission settings respect UI limits and the unique 72-mission bank', () => 
 });
 
 test('sentence settings allow flexible counts only inside supported bounds', () => {
-  assert.equal(isValidSentenceSettings(5, 2), true);
-  assert.equal(isValidSentenceSettings(1, 2), false);
-  assert.equal(isValidSentenceSettings(5, 7), false);
+  assert.equal(isValidSentenceSettings(5, 2, 3), true);
+  assert.equal(isValidSentenceSettings(1, 2, 3), false);
+  assert.equal(isValidSentenceSettings(5, 7, 3), false);
+});
+
+test('sentence draw size can go past three up to every sentence in the room', () => {
+  assert.equal(isValidSentenceSettings(5, 2, 10), true);
+  assert.equal(isValidSentenceSettings(24, 6, 144), true);
+  assert.equal(isValidSentenceSettings(5, 2, 11), false);
+  assert.equal(isValidSentenceSettings(5, 2, 0), false);
+  assert.equal(isValidSentenceSettings(5, 2, 2.5), false);
 });
