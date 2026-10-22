@@ -43,7 +43,7 @@ const state = {
   seats: [], selectedCar: 1, selectedSeat: null, player: null, nickname: '',
   players: [], assignments: [], tab: 'cards',
   playerLimit: 16, teamCount: 4, missionsPerPlayer: 3,
-  live: 'connecting', flipped: new Set(), confirming: null, latestReveal: null, error: '',
+  live: 'connecting', flipped: new Set(), confirming: null, confirmingReroll: null, latestReveal: null, error: '',
 };
 let liveChannel = null;
 let fetching = false;
@@ -65,6 +65,10 @@ const errorMessage = (err) => {
   if (text.includes('SEAT_TAKEN') || text.includes('unique constraint')) return 'ที่นั่งนี้มีคนเลือกไปแล้ว ลองเลือกตำแหน่งอื่น';
   if (text.includes('INVALID_NICKNAME')) return 'กรุณาตั้งชื่อเล่น 2–24 ตัวอักษร';
   if (text.includes('NOT_YOUR_MISSION')) return 'สามารถกดสำเร็จได้เฉพาะภารกิจของตัวเอง';
+  if (text.includes('MISSION_ALREADY_COMPLETED')) return 'ภารกิจนี้สำเร็จแล้ว ไม่สามารถเปลี่ยนได้';
+  if (text.includes('REROLL_ALREADY_USED')) return 'การ์ดนี้ใช้สิทธิ์สุ่มใหม่แล้ว';
+  if (text.includes('NO_AVAILABLE_MISSIONS')) return 'ไม่มีโจทย์สำรองในห้อง การ์ดเดิมยังอยู่และไม่เสียสิทธิ์';
+  if (text.includes('REROLL_CONFLICT')) return 'สถานะการ์ดเปลี่ยนไป กรุณาลองใหม่';
   if (text.includes('NOT_ENOUGH_MISSIONS')) return 'ภารกิจในระบบไม่เพียงพอ กรุณาติดต่อผู้ดูแล';
   if (text.includes('DRAW_ROOM_NOT_FOUND')) return 'ไม่พบห้องสุ่มประโยคนี้ ลองตรวจรหัสอีกครั้ง';
   if (text.includes('ROOM_FULL') || text.includes('DRAW_ROOM_FULL')) return 'ห้องนี้มีผู้เล่นครบตามจำนวนที่โฮสต์ตั้งไว้แล้ว';
@@ -223,6 +227,7 @@ function missionCard(a, i) {
       </button>` : `<div class="card-content"><span class="card-art small">${CARD_STICKERS[i%3]}</span><p>${safe(a.mission_text)}</p>
       ${isDone ? `<div class="card-done-line">${icon('tick',16)} เปิดเผยโจทย์ให้เพื่อนทั้งห้องแล้ว</div>` : `<div class="card-actions">
         <button data-action="flip" data-id="${a.id}" class="text-button">${icon('lock',14)} ซ่อนการ์ด</button>
+        <button data-action="ask-reroll" data-id="${a.id}" class="btn outline compact-btn" ${a.rerolled_at?'disabled':''}>${icon('shuffle',14)} Reroll ${a.rerolled_at?'0/1':'1/1'}</button>
         <button data-action="ask-complete" data-id="${a.id}" class="btn dark compact-btn">ทำสำเร็จแล้ว ${icon('tick',16)}</button></div>`}
       </div>`}
   </article>`;
@@ -268,6 +273,18 @@ function confirmation() {
       <button class="btn primary" data-action="confirm-complete" ${state.busy?'disabled':''}>${state.busy?'กำลังบันทึก...':'ยืนยันสำเร็จ ✓'}</button></div>
   </div></div>`;
 }
+function rerollConfirmation() {
+  if(!state.confirmingReroll)return '';
+  const a=state.assignments.find(x=>x.id===state.confirmingReroll && x.player_id===state.player?.id);
+  if(!a || a.completed_at || a.rerolled_at)return '';
+  return `<div class="dialog-backdrop" role="presentation"><div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="reroll-title">
+    <div class="dialog-emoji">🎲</div><h2 id="reroll-title">สุ่มภารกิจใหม่?</h2>
+    <p>การ์ดใบนี้เปลี่ยนได้ <b>1 ครั้งเท่านั้น</b> เมื่อยืนยันแล้วกลับไปโจทย์เดิมไม่ได้</p>
+    <div class="dialog-task">“${safe(a.mission_text)}”</div>
+    <div class="dialog-buttons"><button class="btn outline" data-action="cancel-reroll">ใช้โจทย์เดิม</button>
+      <button class="btn primary" data-action="confirm-reroll" ${state.busy?'disabled':''}>${state.busy?'กำลังสุ่ม...':'ยืนยันสุ่มใหม่ 🎲'}</button></div>
+  </div></div>`;
+}
 function gameView() {
   const mine=state.assignments.filter(a=>a.player_id===state.player?.id).sort((a,b)=>a.card_number-b.card_number);
   const done=mine.filter(a=>a.completed_at).length;
@@ -286,7 +303,7 @@ function gameView() {
          <button class="btn outline board-cta" data-action="tab" data-tab="board">ดูภารกิจที่เพื่อนทำสำเร็จ ${icon('arrow',18)}</button>` : `${scoreboard()}${missionFeed()}${roster()}`}
       <div class="game-bottom"><span>🚗</span> KEEP IT FUN, KEEP IT SECRET <span>🏁</span><p>คนขับตั้งใจขับรถนะ ให้ผู้โดยสารเป็นคนเล่น</p>
         <button class="subtle-link" data-action="home">เปลี่ยนห้อง / กลับหน้าแรก</button></div>
-    </main>${confirmation()}`;
+    </main>${confirmation()}${rerollConfirmation()}`;
 }
 function revealNotice() {
   const a=state.latestReveal;
@@ -365,7 +382,7 @@ async function refreshData() {
   try {
     const [pr,ar]=await Promise.all([
       authed(()=>db.from('trip_players').select('id,room_id,user_id,nickname,car_number,seat_number').eq('room_id',roomId)),
-      authed(()=>db.from('trip_assignments').select('id,room_id,player_id,card_number,mission_text,completed_at').eq('room_id',roomId)),
+      authed(()=>db.from('trip_assignments').select('id,room_id,player_id,card_number,mission_text,completed_at,rerolled_at').eq('room_id',roomId)),
     ]);
     if(pr.error) throw pr.error;
     if(ar.error) throw ar.error;
@@ -430,7 +447,7 @@ async function shareInvite() {
 function backHome() {
   const wasSentence=state.screen==='sentence'||state.mode==='sentences';
   stopSubscription();sentenceDraw.leave();state.screen='welcome';state.mode=wasSentence?'sentences':'missions';state.roomId='';state.roomCode='';state.player=null;
-  state.players=[];state.assignments=[];state.confirming=null;state.latestReveal=null;state.flipped.clear();
+  state.players=[];state.assignments=[];state.confirming=null;state.confirmingReroll=null;state.latestReveal=null;state.flipped.clear();
   removeLocal('trip_room_code');
   history.replaceState(null,'',state.mode==='sentences'?`${location.pathname}?mode=sentences`:location.pathname);
   render();
@@ -456,6 +473,27 @@ $app.addEventListener('click',async(e)=>{
     const id=el.dataset.id;
     state.flipped.has(id)?state.flipped.delete(id):state.flipped.add(id);
     render();return;
+  }
+  if(action==='ask-reroll'){
+    const a=state.assignments.find(x=>x.id===el.dataset.id && x.player_id===state.player?.id);
+    if(!a || a.completed_at || a.rerolled_at)return;
+    state.confirmingReroll=a.id;render();return;
+  }
+  if(action==='cancel-reroll'){state.confirmingReroll=null;render();return;}
+  if(action==='confirm-reroll'){
+    const id=state.confirmingReroll;
+    const a=state.assignments.find(x=>x.id===id && x.player_id===state.player?.id);
+    if(!a || a.completed_at || a.rerolled_at){state.confirmingReroll=null;render();return;}
+    await withBusy(async()=>{
+      const {data,error}=await rpc('trip_reroll_mission',{p_assignment_id:id});
+      if(error) throw error;
+      const index=state.assignments.findIndex(x=>x.id===id);
+      if(index>=0)state.assignments[index]={...state.assignments[index],mission_text:data.mission_text,rerolled_at:data.rerolled_at};
+      state.flipped.delete(id);
+      state.confirmingReroll=null;
+      await refreshData();
+      toast('ได้รับโจทย์ใหม่แล้ว! การ์ดนี้สุ่มซ้ำไม่ได้ 🎲');
+    });return;
   }
   if(action==='ask-complete'){state.confirming=el.dataset.id;render();return;}
   if(action==='cancel-complete'){state.confirming=null;render();return;}
