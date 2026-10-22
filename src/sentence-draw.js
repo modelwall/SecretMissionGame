@@ -1,9 +1,12 @@
 import { isValidSentenceSettings } from './room-settings.js';
 
 const emptySentences = (count) => Array.from({ length: count }, () => '');
+// Must match the sentence-pop animation duration in style.css.
+const REVEAL_POP_MS = 340;
+const REVEAL_STAGGER_MS = 70;
 
 export function createSentenceDraw({
-  db, safe, icon, header, modeNav, codeOnly, onRender, toast, errorMessage,
+  db, safe, icon, header, modeNav, codeOnly, onRender, toast, errorMessage, now = () => Date.now(),
 }) {
   const state = {
     busy: false,
@@ -33,6 +36,8 @@ export function createSentenceDraw({
   let refreshTimer = null;
   let refreshing = false;
   let refreshQueued = false;
+  let revealKey = '';
+  let revealShownAt = 0;
   const volatileMemberTokens = new Map();
 
   const storageGet = (key) => {
@@ -134,6 +139,14 @@ export function createSentenceDraw({
     state.history = room.history || [];
   };
 
+  // Rounds only move forward inside a generation and every reset starts a new
+  // generation, so a status reply read before the latest draw is never applied.
+  const isOlderThanShown = (room) => {
+    const generation = Number(room.generation || 1);
+    if (generation !== state.generation) return generation < state.generation;
+    return Number(room.current_round || 0) < state.currentRound;
+  };
+
   const runBusy = async (task) => {
     if (state.busy) return;
     state.busy = true;
@@ -174,7 +187,7 @@ export function createSentenceDraw({
     try {
       const { data, error } = await db.rpc('sentence_draw_room_status', { p_code: code });
       if (error) throw error;
-      if (state.roomCode !== code) return;
+      if (state.roomCode !== code || isOlderThanShown(data)) return;
       applyRoom(data);
       if (!isEditingDraft()) onRender();
     } catch (error) {
@@ -389,13 +402,26 @@ export function createSentenceDraw({
       </section>` : `<div class="waiting-callout">${playerNote}</div>`}`;
   };
 
+  // Every render replaces the DOM, which would replay the pop-in animation.
+  // Offset each card by the time since this round first appeared instead, so a
+  // re-render continues the animation mid-way and later renders stay still.
+  const cardMotion = (index) => {
+    const key = `${state.roomCode}:${state.generation}:${state.currentRound}`;
+    if (key !== revealKey) {
+      revealKey = key;
+      revealShownAt = now();
+    }
+    const delay = (index % 3) * REVEAL_STAGGER_MS - (now() - revealShownAt);
+    return delay <= -REVEAL_POP_MS ? 'animation:none' : `animation-delay:${delay}ms`;
+  };
+
   const drawView = () => {
     const finished = state.status === 'finished';
     return `<section class="draw-stage">
       <div class="draw-stage-head"><div><span class="eyebrow-text">SECRET SENTENCE DRAW</span><h1>${finished ? `ครบทั้ง ${state.totalCount} ประโยคแล้ว!` : `รอบที่ ${state.currentRound}`}</h1></div>
         <div class="remaining-pill"><strong>${state.remainingCount}</strong><span>เหลือ</span></div></div>
       <div class="sentence-reveal-grid">
-        ${state.currentSentences.map((item, index) => `<article class="sentence-reveal-card reveal-tone-${index % 3}"><span>${String(index + 1).padStart(2, '0')}</span><p>${safe(item.text)}</p></article>`).join('')}
+        ${state.currentSentences.map((item, index) => `<article class="sentence-reveal-card reveal-tone-${index % 3}" style="${cardMotion(index)}"><span>${String(index + 1).padStart(2, '0')}</span><p>${safe(item.text)}</p></article>`).join('')}
       </div>
       ${finished ? `<div class="finished-callout">🏁 สุ่มครบ ${state.currentRound} รอบแล้ว ทุกประโยคถูกเปิดเผยครั้งเดียว</div>` : ''}
       ${state.isHost ? `<section class="host-draw-controls">
@@ -524,5 +550,6 @@ export function createSentenceDraw({
   return {
     state, view, enter, refresh, stop, leave, handleClick, handleSubmit, handleInput,
     isBusy: () => state.busy,
+    inRoom: () => Boolean(state.roomCode),
   };
 }

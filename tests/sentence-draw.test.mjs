@@ -37,7 +37,7 @@ function installBrowserStubs() {
   };
 }
 
-function makeController(rpc) {
+function makeController(rpc, { now } = {}) {
   const calls = [];
   const db = {
     async rpc(name, args) { calls.push({ name, args }); return rpc(name, args, calls); },
@@ -60,9 +60,118 @@ function makeController(rpc) {
     onRender: () => { renders += 1; },
     toast: () => {},
     errorMessage: (error) => error?.message || String(error),
+    now,
   });
   return { controller, calls, get renders() { return renders; } };
 }
+
+const startedRoom = (round, overrides = {}) => baseRoom({
+  is_host: true,
+  status: 'started',
+  current_round: round,
+  remaining_count: 48 - round * 3,
+  current_sentences: [1, 2, 3].map((position) => ({ id: `r${round}-${position}`, position, text: `รอบ ${round} ใบ ${position}` })),
+  ...overrides,
+});
+
+const revealCards = (html) => [...html.matchAll(/<article class="sentence-reveal-card[^"]*"([^>]*)>/g)].map((match) => match[1]);
+
+test('inRoom reports a room opened from the landing forms so the app keeps polling it', async () => {
+  installBrowserStubs();
+  const originalFormData = globalThis.FormData;
+  globalThis.FormData = class {
+    constructor(form) { this.values = form.values; }
+    get(name) { return this.values[name] ?? null; }
+    has(name) { return Boolean(this.values[name]); }
+  };
+  try {
+    const fixture = makeController(() => ({ data: baseRoom({ is_host: true, has_player: false }), error: null }));
+    assert.equal(fixture.controller.inRoom(), false);
+
+    await fixture.controller.handleSubmit({
+      id: 'sentence-create-form',
+      values: { player_limit: '5', sentences_per_player: '2', draw_size: '3' },
+    });
+    assert.equal(fixture.controller.inRoom(), true);
+
+    fixture.controller.leave();
+    assert.equal(fixture.controller.inRoom(), false);
+
+    await fixture.controller.handleSubmit({ id: 'sentence-join-form', values: { code: 'A1B2C3D4' } });
+    assert.equal(fixture.controller.inRoom(), true);
+  } finally {
+    globalThis.FormData = originalFormData;
+  }
+});
+
+test('a status reply that is older than the shown draw result is ignored', async () => {
+  installBrowserStubs();
+  let reply = startedRoom(2, { generation: 2 });
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: reply, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+  await fixture.controller.enter('A1B2C3D4');
+
+  reply = startedRoom(1, { generation: 2 });
+  await fixture.controller.refresh();
+  assert.equal(fixture.controller.state.currentRound, 2);
+  assert.match(fixture.controller.view(), /รอบ 2 ใบ 1/);
+  assert.doesNotMatch(fixture.controller.view(), /รอบ 1 ใบ 1/);
+
+  // A pre-reset snapshot is older even when its round number is higher.
+  reply = startedRoom(5, { generation: 1 });
+  await fixture.controller.refresh();
+  assert.equal(fixture.controller.state.generation, 2);
+  assert.equal(fixture.controller.state.currentRound, 2);
+});
+
+test('a status reply from a newer reset generation still replaces the shown round', async () => {
+  installBrowserStubs();
+  let reply = startedRoom(2);
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: reply, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  });
+  await fixture.controller.enter('A1B2C3D4');
+
+  reply = baseRoom({ is_host: true, generation: 2 });
+  await fixture.controller.refresh();
+  assert.equal(fixture.controller.state.status, 'lobby');
+  assert.equal(fixture.controller.state.generation, 2);
+  assert.equal(fixture.controller.state.currentRound, 0);
+});
+
+test('re-rendering a revealed round never restarts the card pop animation', async () => {
+  installBrowserStubs();
+  let clock = 1000;
+  let reply = startedRoom(1);
+  const fixture = makeController((name) => {
+    if (name === 'sentence_draw_room_status' || name === 'sentence_draw_join_room') return { data: reply, error: null };
+    throw new Error(`Unexpected RPC: ${name}`);
+  }, { now: () => clock });
+  await fixture.controller.enter('A1B2C3D4');
+
+  // First sight of a round: cards pop in with their stagger.
+  assert.deepEqual(revealCards(fixture.controller.view()), [
+    ' style="animation-delay:0ms"', ' style="animation-delay:70ms"', ' style="animation-delay:140ms"',
+  ]);
+
+  // A re-render mid-animation (e.g. the Realtime refresh) continues where it was.
+  clock += 200;
+  assert.deepEqual(revealCards(fixture.controller.view()), [
+    ' style="animation-delay:-200ms"', ' style="animation-delay:-130ms"', ' style="animation-delay:-60ms"',
+  ]);
+
+  // Later re-renders (host pressing draw, polling) show the cards still.
+  clock += 2000;
+  assert.deepEqual(revealCards(fixture.controller.view()), Array(3).fill(' style="animation:none"'));
+
+  // The next round pops in again.
+  reply = startedRoom(2);
+  await fixture.controller.refresh();
+  assert.equal(revealCards(fixture.controller.view())[0], ' style="animation-delay:0ms"');
+});
 
 test('new visitor joins by code after the private status RPC rejects non-members', async () => {
   installBrowserStubs();

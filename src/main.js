@@ -494,7 +494,7 @@ async function init() {
   } catch(err){console.error(err);state.screen='setup';render();toast(errorMessage(err),true);}
   setInterval(()=>{
     if(document.visibilityState==='visible' && state.screen==='game') refreshData();
-    if(document.visibilityState==='visible' && state.screen==='sentence') sentenceDraw.refresh();
+    if(document.visibilityState==='visible' && sentenceDraw.inRoom()) sentenceDraw.refresh();
     if(document.visibilityState==='visible' && state.screen==='seats') {
       db.rpc('trip_room_status',{p_code:state.roomCode}).then(({data})=>{
         if(data && state.screen==='seats' && JSON.stringify(data.seats)!==JSON.stringify(state.seats)){
@@ -506,7 +506,7 @@ async function init() {
   },15000);
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible' && state.screen==='game') scheduleRefresh();
-    if(document.visibilityState==='visible' && state.screen==='sentence') sentenceDraw.refresh();
+    if(document.visibilityState==='visible' && sentenceDraw.inRoom()) sentenceDraw.refresh();
   });
 }
 init();
