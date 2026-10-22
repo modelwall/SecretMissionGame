@@ -352,11 +352,11 @@ textarea:focus-visible { outline: 3px solid #f6c84e; outline-offset: 2px; }
 .remaining-pill strong { font: 700 25px/1 'Fredoka',sans-serif; }
 .remaining-pill span { margin-top: 3px; font-size: 9px; font-weight: 700; }
 .sentence-reveal-grid { display: grid; gap: 14px; }
-.sentence-reveal-card { position: relative; display: flex; min-height: 158px; align-items: center; justify-content: center; overflow: hidden; border: 2px solid var(--navy); border-radius: 20px; background: #ccecf5; box-shadow: 0 7px 0 #8ebdca; padding: 35px 21px 24px; text-align: center; animation: sentence-pop .34s ease-out both; }
+.sentence-reveal-card { position: relative; display: flex; min-height: 170px; align-items: center; justify-content: center; overflow: hidden; border: 2px solid var(--navy); border-radius: 20px; background: #ccecf5; box-shadow: 0 7px 0 #8ebdca; padding: 42px 20px 28px; text-align: center; animation: sentence-pop .34s ease-out both; }
 .sentence-reveal-card.reveal-tone-1 { background: #ffe397; box-shadow: 0 7px 0 #d9b849; animation-delay: .07s; }
 .sentence-reveal-card.reveal-tone-2 { background: #cce9d3; box-shadow: 0 7px 0 #8cbd98; animation-delay: .14s; }
-.sentence-reveal-card > span { position: absolute; top: 10px; left: 13px; border-radius: 100px; background: rgb(255 255 255 / .62); padding: 4px 7px; font: 900 9px 'Nunito',sans-serif; }
-.sentence-reveal-card p { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.85; overflow-wrap: anywhere; }
+.sentence-reveal-card > span { position: absolute; top: 11px; left: 13px; border-radius: 100px; background: rgb(255 255 255 / .62); padding: 4px 8px; font: 900 11px 'Nunito',sans-serif; }
+.sentence-reveal-card p { margin: 0; font-size: clamp(21px,5.8vw,26px); font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; text-wrap: balance; }
 @keyframes sentence-pop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 .host-draw-controls { display: grid; gap: 11px; margin-top: 23px; }
 .finished-callout { margin-top: 22px; border-style: solid; border-color: #91c7a0; background: #e3f4e8; color: #276e43; font-weight: 700; }
@@ -371,8 +371,10 @@ textarea:focus-visible { outline: 3px solid #f6c84e; outline-offset: 2px; }
   .mode-nav button { padding: 13px 15px; }
   .mode-nav button b { font-size: 13px; }
   .mode-nav button small { font-size: 9px; }
-  .sentence-reveal-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .sentence-reveal-card { min-height: 230px; padding-inline: 15px; }
+  .sentence-reveal-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .sentence-reveal-card { min-height: 220px; padding-inline: 22px; }
+  .sentence-reveal-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .sentence-reveal-card p { font-size: 25px; }
 }
 
 @media (max-width: 420px) {
