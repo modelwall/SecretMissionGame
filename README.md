@@ -130,6 +130,8 @@ Vercel จะติดตั้ง Dependencies, รัน `npm run build` แ�
 | หน้าเว็บขึ้น Setup Required | เพิ่ม Environment Variables แล้ว Redeploy |
 | Anonymous sign-ins disabled | ไปเปิด Allow anonymous sign-ins ใน Supabase Auth |
 | Could not find function | รัน SQL migrations ทุกไฟล์ตามลำดับให้ครบ |
+| `permission denied for function ...` | request ถูกส่งโดยไม่มี session (มักเกิดใน in-app browser ของ LINE / Discord ที่ storage ไม่เสถียร) เว็บจะเก็บ session สำรองในหน่วยความจำและกู้ให้อัตโนมัติ ถ้ายังเจอให้เปิดลิงก์ใน Safari / Chrome |
+| เปิดเว็บแล้วขึ้น “เชื่อมต่อเกมไม่สำเร็จ” / Request rate limit reached | Supabase จำกัดจำนวน anonymous sign-in ต่อ IP ต่อชั่วโมง ถ้าทุกคนใช้ hotspot เดียวกันให้เพิ่มค่าที่ **Authentication → Rate Limits** |
 | เข้าได้ แต่ไม่เห็นคะแนนสด | SQL ต้องเพิ่ม `trip_assignments`, `trip_players` ใน `supabase_realtime`; หน้าเว็บจะ fallback โหลดทุก 15 วินาที |
 | 2 คนเลือก Player เดียวกัน | คนที่กดทีหลังจะได้รับข้อความที่นั่งถูกเลือกแล้ว ให้เลือกช่องอื่น |
 | เปลี่ยนมือถือแล้วการ์ดเดิมหาย | เป็นข้อจำกัดของ Anonymous Auth (session ผูกกับเบราว์เซอร์เดิม) |

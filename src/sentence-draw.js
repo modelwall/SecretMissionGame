@@ -167,7 +167,7 @@ export function createSentenceDraw({
     url.searchParams.set('mode', 'sentences');
     url.searchParams.set('room', state.roomCode);
     history.replaceState(null, '', url);
-    localStorage.setItem('sentence_draw_room_code', state.roomCode);
+    storageSet('sentence_draw_room_code', state.roomCode);
   };
 
   const stop = () => {
@@ -288,7 +288,7 @@ export function createSentenceDraw({
     state.history = [];
     state.mySentences = emptySentences(state.sentencesPerPlayer);
     state.draftDirty = false;
-    localStorage.removeItem('sentence_draw_room_code');
+    storageRemove('sentence_draw_room_code');
   };
 
   const share = async () => {

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { createSentenceDraw } from './sentence-draw.js';
 import { capacityForTeam, isValidMissionSettings } from './room-settings.js';
+import { createResilientStorage, createSessionRetry, isAnonPermissionError } from './session.js';
 import './style.css';
 
 const $app = document.querySelector('#app');
@@ -8,8 +9,24 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const isConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('YOUR-PROJECT') && !SUPABASE_KEY.includes('YOUR_'));
 const db = isConfigured ? createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  auth: {
+    persistSession: true, autoRefreshToken: true, detectSessionInUrl: false,
+    storage: createResilientStorage(() => globalThis.localStorage),
+  },
 }) : null;
+// Some in-app browsers block localStorage; the room code in the URL still works.
+const readLocal = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+const writeLocal = (key, value) => { try { localStorage.setItem(key, value); } catch { /* Keep playing without it. */ } };
+const removeLocal = (key) => { try { localStorage.removeItem(key); } catch { /* Nothing stored. */ } };
+// A request that still ran without a session gets one retry after re-auth. A
+// brand-new anonymous user cannot act as the old one, so reload to re-enter the
+// room (Sentence Draw then recovers the player with its browser token).
+const authed = createSessionRetry(async () => {
+  const before = state.user?.id;
+  await ensureAuth();
+  if (before && state.user?.id !== before) location.reload();
+});
+const rpc = (name, args) => authed(() => db.rpc(name, args));
 const CARD_STICKERS = ['🎮', '🧩', '🎯'];
 const CARS = [
   { n: 1, color: 'blue', label: 'Blue Cruiser', emoji: '🚙' },
@@ -23,7 +40,7 @@ const CARS = [
 ];
 const state = {
   screen: 'welcome', mode: 'missions', busy: false, user: null, roomCode: '', roomId: '',
-  seats: [], selectedCar: 1, selectedSeat: null, player: null,
+  seats: [], selectedCar: 1, selectedSeat: null, player: null, nickname: '',
   players: [], assignments: [], tab: 'cards',
   playerLimit: 16, teamCount: 4, missionsPerPlayer: 3,
   live: 'connecting', flipped: new Set(), confirming: null, latestReveal: null, error: '',
@@ -63,6 +80,7 @@ const errorMessage = (err) => {
   if (text.includes('DRAW_NOT_MEMBER')) return 'คุณยังไม่ได้เข้าร่วมห้องสุ่มประโยคนี้';
   if (text.includes('Anonymous sign-ins are disabled')) return 'ยังไม่ได้เปิด Anonymous Sign-Ins ใน Supabase';
   if (text.includes('Could not find the function')) return 'ฐานข้อมูลยังไม่พร้อม กรุณารัน migration ล่าสุดใน Supabase';
+  if (isAnonPermissionError(err)) return 'การเชื่อมต่อหลุด กรุณาโหลดหน้าใหม่ หรือเปิดลิงก์ใน Safari / Chrome';
   if (text.includes('Failed to fetch') || text.includes('NetworkError')) return 'ไม่สามารถเชื่อมต่ออินเทอร์เน็ต ลองใหม่อีกครั้ง';
   return text || 'เกิดข้อผิดพลาด กรุณาลองใหม่';
 };
@@ -109,7 +127,8 @@ const button = (label,action, extra='',attrs='') => `<button class="btn ${extra}
 const stepLabel = (n, txt) => `<div class="eyebrow"><span class="step-dot">${n}</span>${txt}</div>`;
 const loadingBtn = (label) => `<button class="btn primary" disabled><span class="spinner"></span>${label}</button>`;
 const sentenceDraw = createSentenceDraw({
-  db, safe, icon, header, modeNav, codeOnly, onRender: () => render(), toast, errorMessage,
+  db: db && { rpc, channel: (name) => db.channel(name), removeChannel: (channel) => db.removeChannel(channel) },
+  safe, icon, header, modeNav, codeOnly, onRender: () => render(), toast, errorMessage,
 });
 
 function welcomeView() {
@@ -151,9 +170,17 @@ function setupView() {
   return `${header('SETUP REQUIRED')}
     <main class="container setup-area"><div class="card-paper setup-card"><span class="giant-emoji">🛠️</span><h1>อีกนิดเดียวก็เล่นได้!</h1>
     <p>เว็บพร้อมแล้ว แต่ต้องเชื่อมกับ Supabase ก่อนจึงจะเล่นแบบ Multiplayer ได้</p>
-    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>schema.sql</code> → <code>sentence_draw_migration.sql</code> → <code>flexible_room_settings_migration.sql</code> → <code>sentence_draw_session_fix_migration.sql</code></li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
+    <ol><li>สร้าง Supabase Project</li><li>เปิด Anonymous Sign-Ins</li><li>รัน <code>schema.sql</code> → <code>sentence_draw_migration.sql</code> → <code>flexible_room_settings_migration.sql</code> → <code>sentence_draw_session_fix_migration.sql</code> → <code>sentence_draw_flexible_draw_migration.sql</code></li><li>เพิ่ม Environment Variables สองตัวใน Vercel แล้ว Deploy ใหม่</li></ol>
     <div class="mini-code">VITE_SUPABASE_URL<br>VITE_SUPABASE_ANON_KEY</div>
     <p class="small-note">ดูขั้นตอนละเอียดในไฟล์ README.md ที่มาพร้อมโปรเจกต์</p></div></main>`;
+}
+// Players whose sign-in fails on load should get a retry, not the developer setup steps.
+function connectErrorView() {
+  return `${header('CONNECTION')}
+    <main class="container setup-area"><div class="card-paper setup-card"><span class="giant-emoji">📶</span><h1>เชื่อมต่อเกมไม่สำเร็จ</h1>
+    <p>${safe(state.error)}</p>
+    <button class="btn primary big" data-action="reload">ลองใหม่อีกครั้ง</button>
+    <p class="small-note">ถ้าเปิดจาก LINE / Discord แล้วยังไม่ได้ ให้กดเมนู ⋯ แล้วเลือกเปิดใน Safari หรือ Chrome</p></div></main>`;
 }
 function seatsView() {
   const selected = activeCars().find(c=>c.n === state.selectedCar) || activeCars()[0];
@@ -179,7 +206,7 @@ function seatsView() {
           <span class="seat-number">${isTaken?'🔒':'⭐'}</span><b>Player ${i}</b><small>${isTaken?'มีเจ้าของแล้ว':state.selectedSeat===i?'เลือกแล้ว ✓':'ว่าง · แตะเพื่อเลือก'}</small></button>`;
       }).join('')}</div>
       ${state.selectedSeat && !occupied.has(`${state.selectedCar}-${state.selectedSeat}`) ? `<form id="join-seat-form" class="join-name-form"><label for="nickname">ชื่อเล่นของคุณ</label>
-        <input id="nickname" name="nickname" type="text" maxlength="24" minlength="2" placeholder="เช่น เอิ้ก, อ้อ, เบ้บ" required autocomplete="nickname" />
+        <input id="nickname" name="nickname" type="text" maxlength="24" minlength="2" placeholder="เช่น เอิ้ก, อ้อ, เบ้บ" required autocomplete="nickname" value="${safe(state.nickname)}" />
         <button class="btn primary big" type="submit" ${state.busy?'disabled':''}>${state.busy?'กำลังรับภารกิจ...':`รับการ์ดภารกิจ ${state.missionsPerPlayer} ใบ`} ${icon('arrow',19)}</button></form>`:
         `<div class="seat-hint">👆 เลือก Player ที่ยังว่างเพื่อรับภารกิจลับของตัวเอง</div>`}
     </div><p class="footer-note">📱 1 Player ต่อ 1 มือถือ · กดสำเร็จแล้วเพื่อนจะเห็นโจทย์</p>
@@ -264,7 +291,9 @@ function gameView() {
 function revealNotice() {
   const a=state.latestReveal;
   if(!a) return '';
-  return `<aside class="reveal-toast" role="status" aria-live="polite">
+  // Re-renders replace the toast; continue its 300ms slide-in instead of replaying it.
+  const elapsed=Date.now()-a.shownAt;
+  return `<aside class="reveal-toast" role="status" aria-live="polite" style="${elapsed<300?`animation-delay:-${elapsed}ms`:'animation:none'}">
     <div class="reveal-emoji">🎉</div>
     <div class="reveal-copy"><strong>มีคนเปิดเผยโจทย์ใหม่!</strong>
       <small>${safe(a.who)} · Car ${a.car} ทำสำเร็จแล้ว</small>
@@ -275,6 +304,7 @@ function revealNotice() {
 }
 function render() {
   const content = state.screen==='setup' ? setupView()
+    : state.screen==='offline' ? connectErrorView()
     : state.screen==='sentence' ? sentenceDraw.view()
     : state.screen==='seats' ? seatsView()
     : state.screen==='game' ? gameView()
@@ -304,16 +334,16 @@ async function ensureAuth() {
 async function loadRoom(code) {
   const normalized=codeOnly(code);
   if(normalized.length!==8) throw new Error('รหัสห้องต้องเป็นตัวเลขหรือ A–F จำนวน 8 ตัว');
-  const {data:room,error:e1}=await db.rpc('trip_room_status',{p_code:normalized});
+  const {data:room,error:e1}=await rpc('trip_room_status',{p_code:normalized});
   if(e1) throw e1;
   state.roomCode=room.code;state.roomId=room.id;state.seats=room.seats||[];
   state.playerLimit=Number(room.player_limit||16);state.teamCount=Number(room.team_count||4);
   state.missionsPerPlayer=Number(room.missions_per_player||3);
   if(state.selectedCar>state.teamCount)state.selectedCar=1;
-  const {data:me,error:e2}=await db.from('trip_players').select('*').eq('room_id',room.id).eq('user_id',state.user.id).maybeSingle();
+  const {data:me,error:e2}=await authed(()=>db.from('trip_players').select('*').eq('room_id',room.id).eq('user_id',state.user.id).maybeSingle());
   if(e2) throw e2;
   state.player=me || null;
-  localStorage.setItem('trip_room_code',room.code);
+  writeLocal('trip_room_code',room.code);
   const currentUrl=new URL(location.href);currentUrl.searchParams.set('room',room.code);history.replaceState(null,'',currentUrl);
   if(me) {state.screen='game';await refreshData();subscribeToRoom();}
   else {stopSubscription();state.screen='seats';state.selectedSeat=null;}
@@ -321,7 +351,7 @@ async function loadRoom(code) {
 }
 async function refreshSeats() {
   if(!state.roomCode) return;
-  const {data,error}=await db.rpc('trip_room_status',{p_code:state.roomCode});
+  const {data,error}=await rpc('trip_room_status',{p_code:state.roomCode});
   if(error) throw error;
   state.seats=data.seats||[];
   state.playerLimit=Number(data.player_limit||state.playerLimit);state.teamCount=Number(data.team_count||state.teamCount);
@@ -334,8 +364,8 @@ async function refreshData() {
   const roomId=state.roomId;
   try {
     const [pr,ar]=await Promise.all([
-      db.from('trip_players').select('id,room_id,user_id,nickname,car_number,seat_number').eq('room_id',roomId),
-      db.from('trip_assignments').select('id,room_id,player_id,card_number,mission_text,completed_at').eq('room_id',roomId),
+      authed(()=>db.from('trip_players').select('id,room_id,user_id,nickname,car_number,seat_number').eq('room_id',roomId)),
+      authed(()=>db.from('trip_assignments').select('id,room_id,player_id,card_number,mission_text,completed_at').eq('room_id',roomId)),
     ]);
     if(pr.error) throw pr.error;
     if(ar.error) throw ar.error;
@@ -352,7 +382,7 @@ async function refreshData() {
     if(revealed) {
       const who=state.players.find(p=>p.id===revealed.player_id);
       state.latestReveal={id:revealed.id,text:revealed.mission_text,
-        who:who?.nickname||'Player',car:who?.car_number||'?'};
+        who:who?.nickname||'Player',car:who?.car_number||'?',shownAt:Date.now()};
       setTimeout(()=>{
         if(state.latestReveal?.id===revealed.id) {
           state.latestReveal=null;
@@ -401,7 +431,7 @@ function backHome() {
   const wasSentence=state.screen==='sentence'||state.mode==='sentences';
   stopSubscription();sentenceDraw.leave();state.screen='welcome';state.mode=wasSentence?'sentences':'missions';state.roomId='';state.roomCode='';state.player=null;
   state.players=[];state.assignments=[];state.confirming=null;state.latestReveal=null;state.flipped.clear();
-  localStorage.removeItem('trip_room_code');
+  removeLocal('trip_room_code');
   history.replaceState(null,'',state.mode==='sentences'?`${location.pathname}?mode=sentences`:location.pathname);
   render();
 }
@@ -409,6 +439,7 @@ $app.addEventListener('click',async(e)=>{
   const el=e.target.closest('[data-action]');if(!el||state.busy||sentenceDraw.isBusy())return;
   const action=el.dataset.action;
   if(action==='home')return backHome();
+  if(action==='reload')return location.reload();
   if(action==='select-mode'){
     stopSubscription();sentenceDraw.leave();
     state.mode=el.dataset.mode==='sentences'?'sentences':'missions';state.screen='welcome';
@@ -430,7 +461,7 @@ $app.addEventListener('click',async(e)=>{
   if(action==='cancel-complete'){state.confirming=null;render();return;}
   if(action==='confirm-complete'){
     await withBusy(async()=>{
-      const {error}=await db.rpc('trip_complete_mission',{p_assignment_id:state.confirming});
+      const {error}=await rpc('trip_complete_mission',{p_assignment_id:state.confirming});
       if(error) throw error;
       state.confirming=null;
       await refreshData();
@@ -449,7 +480,7 @@ $app.addEventListener('submit',async(e)=>{
       toast('ตั้งค่าได้สูงสุด 24 คน, 8 ทีม, 6 โจทย์ต่อคน และรวมไม่เกิน 72 โจทย์',true);return;
     }
     await withBusy(async()=>{
-      const {data,error}=await db.rpc('trip_create_room',{p_player_limit:playerLimit,p_team_count:teamCount,p_missions_per_player:missionsPerPlayer});if(error)throw error;
+      const {data,error}=await rpc('trip_create_room',{p_player_limit:playerLimit,p_team_count:teamCount,p_missions_per_player:missionsPerPlayer});if(error)throw error;
       await loadRoom(data.code);
       toast('สร้างห้องแล้ว! แชร์โค้ดให้เพื่อนได้เลย 🎈');
     });return;
@@ -461,7 +492,7 @@ $app.addEventListener('submit',async(e)=>{
   if(e.target.id==='join-seat-form'){
     e.preventDefault();const nickname=String(new FormData(e.target).get('nickname')||'').trim();
     await withBusy(async()=>{
-      const {error}=await db.rpc('trip_join_seat',{
+      const {error}=await rpc('trip_join_seat',{
         p_code:state.roomCode,p_car:state.selectedCar,p_seat:state.selectedSeat,p_nickname:nickname,
       });
       if(error){if(error.message?.includes('SEAT_TAKEN'))await refreshSeats();throw error;}
@@ -470,7 +501,10 @@ $app.addEventListener('submit',async(e)=>{
     });
   }
 });
-$app.addEventListener('input',(e)=>sentenceDraw.handleInput(e.target));
+$app.addEventListener('input',(e)=>{
+  if(e.target.id==='nickname'){state.nickname=e.target.value;return;}
+  sentenceDraw.handleInput(e.target);
+});
 
 async function init() {
   if(!isConfigured){state.screen='setup';render();return;}
@@ -481,25 +515,27 @@ async function init() {
     state.mode=params.get('mode')==='sentences'?'sentences':'missions';
     const queryCode=params.get('room');
     if(state.mode==='sentences'){
-      const target=queryCode||localStorage.getItem('sentence_draw_room_code');
+      const target=queryCode||readLocal('sentence_draw_room_code');
       if(target){
         state.screen='sentence';
         try{await sentenceDraw.enter(target);}catch(err){console.warn(err);backHome();toast(errorMessage(err),true);}
       } else render();
     } else {
-      const target=queryCode||localStorage.getItem('trip_room_code');
+      const target=queryCode||readLocal('trip_room_code');
       if(target){try{await loadRoom(target);}catch(err){console.warn(err);backHome();toast(errorMessage(err),true);}}
       else render();
     }
-  } catch(err){console.error(err);state.screen='setup';render();toast(errorMessage(err),true);}
+  } catch(err){console.error(err);state.error=errorMessage(err);state.screen='offline';render();}
   setInterval(()=>{
     if(document.visibilityState==='visible' && state.screen==='game') refreshData();
     if(document.visibilityState==='visible' && sentenceDraw.inRoom()) sentenceDraw.refresh();
     if(document.visibilityState==='visible' && state.screen==='seats') {
-      db.rpc('trip_room_status',{p_code:state.roomCode}).then(({data})=>{
+      rpc('trip_room_status',{p_code:state.roomCode}).then(({data})=>{
         if(data && state.screen==='seats' && JSON.stringify(data.seats)!==JSON.stringify(state.seats)){
           state.seats=data.seats;state.playerLimit=Number(data.player_limit||state.playerLimit);
-          state.teamCount=Number(data.team_count||state.teamCount);state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);render();
+          state.teamCount=Number(data.team_count||state.teamCount);state.missionsPerPlayer=Number(data.missions_per_player||state.missionsPerPlayer);
+          // Re-rendering mid-typing would close the phone keyboard; join-seat still rechecks the seat.
+          if(document.activeElement?.id!=='nickname') render();
         }
       });
     }
