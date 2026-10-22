@@ -291,6 +291,14 @@ input:focus { border-color: var(--blue-dark); background: #fff; }
 .settings-grid label > span { display: block; margin-bottom: 6px; color: #4f6876; font: 800 9px 'Nunito',sans-serif; }
 .settings-grid input { padding: 11px 9px; text-align: center; font: 800 15px 'Nunito',sans-serif; }
 .settings-note { margin: -3px 0 0; line-height: 1.6; }
+.team-names-panel { background: #f2f8fa; border: 1px solid #d1e4e9; border-radius: 15px; padding: 14px; }
+.team-names-panel .settings-heading { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.team-name-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.team-name-field { display: block; min-width: 0; }
+.team-name-field > span { display: block; margin-bottom: 5px; color: #506c7d; font: 800 11px 'Nunito',sans-serif; }
+.team-name-field input { background: #fff; padding: 10px 11px; font-size: 13px; }
+.car-option b,.score-car-top > span,.roster-car h3,.game-welcome p { overflow-wrap: anywhere; white-space: normal; }
+@media (max-width: 370px) { .team-name-grid { grid-template-columns: 1fr; } }
 .room-config-summary { display: flex; flex-wrap: wrap; gap: 7px; margin: -5px 0 15px; }
 .room-config-summary span { border: 1px solid #ccdce2; border-radius: 100px; background: #fff; padding: 7px 10px; color: #536d7a; font-size: 9px; font-weight: 800; }
 .sentence-settings-grid { margin-bottom: 4px; }
