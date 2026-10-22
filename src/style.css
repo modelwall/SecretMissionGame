@@ -101,7 +101,7 @@ input:focus { border-color: var(--blue-dark); background: #fff; }
 .car-option-top > span:first-child { font-size: 27px; }
 .seat-occupancy { font: 900 10px 'Nunito',sans-serif; background: rgb(255 255 255 / .72); border-radius: 100px; padding: 5px 8px; }
 .mini-car { font-size: 36px; line-height: 1.3; margin: auto auto 3px; filter: drop-shadow(0 5px 0 rgb(255 255 255 / .48)); }
-.car-option b { font: 700 20px 'Fredoka',sans-serif; }
+.car-option b { font: 700 20px 'Prompt',sans-serif; }
 .car-option small { font: 800 10px 'Nunito',sans-serif; color: #425e6d; }
 .selection-panel { background: #fff; border: 2px solid #d2dde2; border-radius: 21px; padding: 21px 17px; margin-top: 24px; box-shadow: 0 7px 0 #cdd9de; }
 .section-heading.compact { margin: 0 0 17px; }
